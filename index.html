@@ -512,14 +512,31 @@ const PREP = SCENES.filter((s) => s.prep).length;
 const $ = (id) => document.getElementById(id);
 const stage = $('stage'), card = $('card');
 const S = { i: -1, gen: 0, talk: 0, pen: 0, t0: 0, tries: 0, tried: [], res: [], rhythm: 'off', cprOn: false, shockAt: 0, afterShock: null, muted: false, done: false, endT: 0, lastBeat: -1, lastTick: -1, on: '' };
-let ac = null;
+let ac = null, master = null, keepAlive = null;
+/* Starts sound from the first tap. On an iPhone the ring/silent switch mutes Web Audio unless a media element is playing, so a silent looping clip runs alongside. */
+function unlockAudio() {
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume();
+    if (!master) { master = ac.createGain(); master.gain.value = 3; master.connect(ac.destination); }
+  } catch (e) { ac = null; }
+  try {
+    if (!keepAlive) {
+      const n = 800, b = new Uint8Array(44 + n), dv = new DataView(b.buffer);
+      const w = (o, s) => { for (let i = 0; i < s.length; i++) b[o + i] = s.charCodeAt(i); };
+      w(0, 'RIFF'); dv.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+      dv.setUint32(24, 8000, true); dv.setUint32(28, 8000, true); dv.setUint16(32, 1, true); dv.setUint16(34, 8, true); w(36, 'data'); dv.setUint32(40, n, true); b.fill(128, 44);
+      keepAlive = new Audio(URL.createObjectURL(new Blob([b], { type: 'audio/wav' }))); keepAlive.loop = true;
+    }
+    const p = keepAlive.play(); if (p && p.catch) p.catch(() => {});
+  } catch (e) { /* sound still works wherever the silent switch is off */ }
+}
 function tone(f, d, type, g, f2, delay) {
   if (S.muted || !ac) return;
   const o = ac.createOscillator(), a = ac.createGain(), n = ac.currentTime + (delay || 0);
   o.type = type || 'sine'; o.frequency.setValueAtTime(f, n);
   if (f2) o.frequency.exponentialRampToValueAtTime(f2, n + d);
   a.gain.setValueAtTime(g || 0.05, n); a.gain.exponentialRampToValueAtTime(0.0001, n + d);
-  o.connect(a); a.connect(ac.destination); o.start(n); o.stop(n + d);
+  o.connect(a); a.connect(master || ac.destination); o.start(n); o.stop(n + d);
 }
 const jingle = (notes, type) => notes.forEach((f, k) => tone(f, 0.16, type || 'triangle', 0.06, 0, k * 0.11));
 $('sndBtn').onclick = () => { S.muted = !S.muted; $('sndBtn').textContent = S.muted ? 'SOUND OFF' : 'SOUND ON'; };
@@ -675,7 +692,7 @@ function intro() {
     '<p class="story">You are the team leader. First get ready for the worst: three calls on preparation before the code. Then lead it. Your goal is a calm bedside: six clear roles and no crowd around the patient. Make ' + SCENES.length + ' calls in all, read the wall monitor yourself, and keep his heart meter full. Every wrong call drains it, and so does hesitating: you have 40 seconds per decision. Earn a gold star for each decision you get right the first time.</p>' +
     '<button class="go" id="startBtn" type="button">Start the shift</button>';
   $('startBtn').onclick = () => {
-    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) { ac = null; }
+    unlockAudio();
     go(0);
   };
 }
