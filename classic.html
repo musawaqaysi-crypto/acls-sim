@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>ACLS Code Simulation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Great+Vibes&display=swap">
+<style>
+/* Layout: bedside monitor and a top-down map of the team on the left, the decision card and the recorder's code sheet on the right; one column on a phone with the card straight after the monitor. */
+:root {
+  color-scheme: dark;
+  --bg: #0a1014;
+  --panel: #111a20;
+  --screen: #05090b;
+  --line: #24343d;
+  --fg: #e4ecee;
+  --muted: #8da1a9;
+  --ecg: #45e08a;
+  --spo2: #4fd4f0;
+  --etco2: #f2d04a;
+  --bp: #f3f5f6;
+  --action: #f0a43a;
+  --ok: #45e08a;
+  --bad: #ff6b5e;
+  --font-display: "Bricolage Grotesque", "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+.app {
+  max-width: 1160px; margin: 0 auto; padding-block: 16px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
+}
+.app > * { min-width: 0; }
+@media (min-width: 920px) {
+  .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "mon card" "team card" "team log"; grid-template-rows: auto auto 1fr; align-items: start; }
+  .monitor { grid-area: mon; } .card { grid-area: card; } .team { grid-area: team; } .sheet { grid-area: log; }
+}
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+h2 { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: 0.02em; margin: 0; }
+
+/* Monitor */
+.monitor { background: var(--screen); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; position: relative; }
+.mon-top { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.mon-top b { color: var(--fg); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 6px; }
+#ccf.g { color: var(--ok); } #ccf.a { color: var(--action); } #ccf.r { color: var(--bad); }
+.snd { font: inherit; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.snd:hover { color: var(--fg); border-color: var(--muted); }
+.mon-body { display: grid; grid-template-columns: minmax(0, 1fr) 112px; }
+.trace { position: relative; height: 170px; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 30px 30px; background-position: -1px -1px; }
+.trace canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.lead { position: absolute; top: 6px; left: 10px; font-family: var(--font-data); font-size: 12px; color: var(--ecg); }
+.chip { position: absolute; bottom: 8px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--action); background: var(--screen); color: var(--action); font-family: var(--font-data); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--action); animation: thump 0.545s infinite; }
+@keyframes thump { 0%, 100% { transform: scale(0.6); opacity: 0.5; } 30% { transform: scale(1.3); opacity: 1; } }
+.nums { border-left: 1px solid var(--line); display: grid; grid-template-rows: repeat(4, 1fr); }
+.num { padding: 4px 10px; border-bottom: 1px solid var(--line); font-family: var(--font-data); display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.num:last-child { border-bottom: 0; }
+.num span { font-size: 10px; letter-spacing: 0.08em; opacity: 0.85; }
+.num b { font-size: 22px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.num.hr { color: var(--ecg); } .num.sp { color: var(--spo2); } .num.bp { color: var(--bp); } .num.et { color: var(--etco2); }
+.num.bp b { font-size: 17px; }
+@media (max-width: 520px) {
+  .mon-body { grid-template-columns: minmax(0, 1fr); }
+  .trace { height: 130px; }
+  .nums { border-left: 0; border-top: 1px solid var(--line); grid-template-rows: none; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .num { border-bottom: 0; border-right: 1px solid var(--line); padding: 6px 8px; }
+  .num:last-child { border-right: 0; }
+  .num b { font-size: 18px; } .num.bp b { font-size: 14px; }
+}
+.flash { position: absolute; inset: 0; background: var(--bp); opacity: 0; pointer-events: none; }
+.flash.on { animation: flash 0.5s ease-out; }
+@keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+/* Team map */
+.team { padding: 14px 16px 16px; display: grid; gap: 12px; }
+.team-head { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline; }
+.team-head span { font-family: var(--font-data); font-size: 13px; color: var(--action); }
+.map { width: 100%; max-width: 420px; height: auto; display: block; margin: 0 auto; }
+.map .bed { fill: var(--screen); stroke: var(--line); stroke-width: 1.5; }
+.map .body { fill: var(--line); }
+.map .tri { fill: none; stroke: var(--action); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.7; }
+.map .pos circle { fill: var(--panel); stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.map .pos text.c { fill: var(--muted); font: 600 13px var(--font-data); text-anchor: middle; dominant-baseline: central; }
+.map .pos text.l { fill: var(--muted); font: 500 12px var(--font-body); dominant-baseline: central; }
+.map .pos.on circle { fill: var(--action); stroke: var(--action); stroke-dasharray: none; }
+.map .pos.on text.c { fill: var(--bg); }
+.map .pos.on text.l { fill: var(--fg); }
+.roles { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.roles li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; }
+.roles .code { font-family: var(--font-data); font-weight: 600; font-size: 12px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--action); color: var(--bg); }
+.roles b { font-weight: 600; } .roles span.t { color: var(--muted); }
+.roles li.off { opacity: 0.45; } .roles li.off .code { background: none; border: 1px dashed var(--muted); color: var(--muted); }
+.staff-wrap { overflow-x: auto; }
+.staff { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.staff caption { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 14px; padding-bottom: 6px; }
+.staff th, .staff td { text-align: left; vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--line); }
+.staff th { font-family: var(--font-data); font-weight: 600; white-space: nowrap; color: var(--muted); }
+.staff tr.now th, .staff tr.now td { color: var(--fg); background: var(--bg); }
+.staff tr.now th { color: var(--action); }
+.staff td { color: var(--muted); }
+
+/* Code sheet */
+.sheet { padding: 12px 16px; }
+.sheet h2 { color: var(--muted); margin-bottom: 6px; }
+.sheet ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sheet li { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; font-size: 14px; }
+.sheet time { font-family: var(--font-data); color: var(--etco2); font-variant-numeric: tabular-nums; }
+.sheet li.empty { display: block; color: var(--muted); }
+
+/* Decision card */
+.card { padding: 20px; display: grid; gap: 14px; }
+.steps { display: flex; gap: 6px; align-items: center; }
+.steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.steps i.done { background: var(--ok); } .steps i.miss { background: var(--bad); } .steps i.now { background: var(--action); }
+.eyebrow { font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1.15; margin: 0; text-wrap: balance; }
+.story { margin: 0; max-width: 62ch; }
+.q { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 4px 0 0; color: var(--action); text-wrap: balance; }
+.opts { display: grid; gap: 10px; }
+.opt { font: inherit; color: var(--fg); text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; line-height: 1.5; }
+.opt:hover:not(:disabled) { border-color: var(--action); }
+.opt:focus-visible, .go:focus-visible, .snd:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+.opt:disabled { cursor: default; opacity: 0.55; }
+.opt.right { border-color: var(--ok); opacity: 1; }
+.opt.wrong { border-color: var(--bad); opacity: 0.8; text-decoration: line-through; text-decoration-color: var(--bad); }
+.fb { border-radius: 8px; padding: 12px 14px; font-size: 15px; border: 1px solid var(--line); }
+.fb strong { display: block; font-family: var(--font-display); font-size: 16px; margin-bottom: 2px; }
+.fb.ok strong { color: var(--ok); } .fb.no strong { color: var(--bad); }
+.fb ul { margin: 6px 0 0; padding-left: 20px; }
+.fb .pen { font-family: var(--font-data); color: var(--bad); font-size: 13px; }
+.go { font: inherit; font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--bg); background: var(--action); border: 0; border-radius: 8px; padding: 12px 22px; cursor: pointer; justify-self: start; }
+.go:hover { filter: brightness(1.1); }
+.score { display: flex; flex-wrap: wrap; gap: 12px 28px; font-family: var(--font-data); }
+.score div { display: flex; flex-direction: column; }
+.score b { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.score span { font-family: var(--font-body); font-size: 13px; color: var(--muted); max-width: 20ch; }
+.review { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 15px; }
+.review li { display: flex; gap: 10px; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.review .y { color: var(--ok); } .review .n { color: var(--bad); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+
+.sig { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--muted); letter-spacing: 0.04em; padding-top: 8px; }
+.sig b { font-family: "Great Vibes", "Snell Roundhand", "Apple Chancery", cursive; font-weight: 400; font-size: 30px; letter-spacing: 0; color: var(--fg); margin-left: 6px; vertical-align: middle; }
+
+/* Verdict screens */
+.card.is-ok { border-color: var(--ok); }
+.card.is-no { border-color: var(--bad); animation: shake 0.35s; }
+@keyframes shake { 20% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 80% { transform: translateX(-3px); } }
+.verdict { display: flex; gap: 14px; align-items: center; }
+.stamp { width: 60px; height: 60px; flex: none; animation: pop 0.35s ease-out; }
+.stamp circle { fill: none; stroke: currentColor; stroke-width: 3; }
+.stamp path { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.stamp.ok { color: var(--ok); } .stamp.no { color: var(--bad); }
+@keyframes pop { 0% { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+.chose { margin: 0; color: var(--muted); font-size: 14px; }
+.is-ok .score b { color: var(--ok); } .is-no .score b { color: var(--bad); }
+#rsv.g { color: var(--ok); } #rsv.a { color: var(--action); } #rsv.r { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { .chip i, .flash.on, .stamp, .card.is-no { animation: none; } }
+</style>
+
+<div class="app" lang="en">
+  <div class="monitor" aria-label="Patient monitor">
+    <div class="mon-top">
+      <span>CODE TIME<b id="clock">00:00</b></span>
+      <span title="Chest compression fraction: share of the code spent compressing. Target 80% or more.">CCF<b id="ccf">--</b></span>
+      <span title="Patient reserve: falls with every wrong call. Below 60% the code fails.">RESERVE<b id="rsv" class="g">100%</b></span>
+      <button class="snd" id="sndBtn" type="button">SOUND ON</button>
+    </div>
+    <div class="mon-body">
+      <div class="trace"><span class="lead" id="lead">PADS · LEADS OFF</span><canvas id="ecg"></canvas><span class="chip" id="cprChip" hidden><i></i><span id="cprTxt">CPR</span></span></div>
+      <div class="nums">
+        <div class="num hr"><span>HR bpm</span><b id="vHr">--</b></div>
+        <div class="num sp"><span>SpO2 %</span><b id="vSp">--</b></div>
+        <div class="num bp"><span>NIBP mmHg</span><b id="vBp">--/--</b></div>
+        <div class="num et"><span>EtCO2 mmHg</span><b id="vEt">--</b></div>
+      </div>
+    </div>
+    <div class="flash" id="flash"></div>
+  </div>
+
+  <div class="card panel" id="card"></div>
+
+  <section class="team panel">
+    <div class="team-head"><h2>Team around the bed</h2><span id="teamN">Bed 4</span></div>
+    <svg class="map" viewBox="-70 0 460 252" role="img" aria-label="Top-down view of the bed with the six team positions">
+      <rect class="bed" x="112" y="44" width="96" height="170" rx="12"></rect>
+      <circle class="body" cx="160" cy="72" r="13"></circle>
+      <rect class="body" x="140" y="90" width="40" height="70" rx="10"></rect>
+      <rect class="body" x="144" y="164" width="14" height="42" rx="6"></rect>
+      <rect class="body" x="162" y="164" width="14" height="42" rx="6"></rect>
+      <path class="tri" d="M160 20 L238 118 L82 118 Z"></path>
+      <g class="pos" id="pos-A"><circle cx="160" cy="20" r="16"></circle><text class="c" x="160" y="20">A</text><text class="l" x="184" y="20">Airway</text></g>
+      <g class="pos" id="pos-C"><circle cx="238" cy="118" r="16"></circle><text class="c" x="238" y="118">C</text><text class="l" x="262" y="118">Compressor</text></g>
+      <g class="pos" id="pos-D"><circle cx="82" cy="118" r="16"></circle><text class="c" x="82" y="118">D</text><text class="l" x="58" y="118" text-anchor="end">Monitor / Defib</text></g>
+      <g class="pos" id="pos-M"><circle cx="82" cy="178" r="16"></circle><text class="c" x="82" y="178">M</text><text class="l" x="58" y="178" text-anchor="end">IV / IO / Meds</text></g>
+      <g class="pos" id="pos-L"><circle cx="160" cy="234" r="16"></circle><text class="c" x="160" y="234">L</text><text class="l" x="136" y="234" text-anchor="end">Team Leader</text></g>
+      <g class="pos" id="pos-R"><circle cx="238" cy="206" r="16"></circle><text class="c" x="238" y="206">R</text><text class="l" x="262" y="206">Timer / Recorder</text></g>
+    </svg>
+    <ul class="roles" id="roles"></ul>
+    <div class="staff-wrap">
+      <table class="staff">
+        <caption>How to deploy the staff you have</caption>
+        <tbody>
+          <tr data-n="1"><th>1</th><td>Shout for help, activate the code, get the defibrillator. Compressions 30:2 until help arrives.</td></tr>
+          <tr data-n="2"><th>2</th><td>One compresses. The other calls the code, brings the defibrillator, then takes the airway (bag-mask). Swap every 2 minutes.</td></tr>
+          <tr data-n="3"><th>3</th><td>The triangle: Compressor, Airway, Monitor/Defib. The defib operator leads and keeps time.</td></tr>
+          <tr data-n="4"><th>4</th><td>Triangle plus IV/IO/Meds, who also records. One of the triangle still leads.</td></tr>
+          <tr data-n="5"><th>5</th><td>Add a hands-off Team Leader at the foot of the bed, who also keeps the record.</td></tr>
+          <tr data-n="6"><th>6</th><td>Full code team: one person per role. This is the standard to aim for.</td></tr>
+          <tr data-n="7"><th>7+</th><td>Extras stay outside the triangle: relief compressors in a queue, a runner, a CPR coach, family support. Anyone without a role steps back.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sheet panel">
+    <h2>Code sheet (Recorder)</h2>
+    <ol id="log"><li class="empty">Every action is logged here with its time.</li></ol>
+  </section>
+
+  <footer class="sig">Designed by <b>Dr. Musawa</b></footer>
+</div>
+
+<script>
+const ROLES = [['L', 'Team Leader'], ['C', 'Compressor'], ['A', 'Airway'], ['D', 'Monitor / Defib'], ['M', 'IV / IO / Meds'], ['R', 'Timer / Recorder']];
+const FULL = {
+  L: 'You: hands off, at the foot of the bed, eyes on everything',
+  C: 'Compressions 100–120/min, full recoil',
+  A: 'Bag-mask, 2 breaths after every 30 compressions',
+  D: 'Pads on, runs the defibrillator',
+  M: 'IV/IO access, draws up and gives drugs',
+  R: 'Calls the 2-minute cycles, logs every event'
+};
+const T = (over) => Object.assign({}, FULL, over);
+const SCENES = [
+  { t: 0, off: 0, prep: 1, title: 'Check the crash cart', rhythm: 'off', lead: 'PADS · LEADS OFF', v: ['--', '--', '--/--', '--'],
+    n: 2, team: { L: 'You: checking the crash cart', D: 'Triage nurse: settling the patient' },
+    story: 'Ten minutes earlier. The patient has just been wheeled into Bed 4, your resuscitation bed, and the nurse is settling him. The crash cart is next to you and tonight’s check is not signed yet.',
+    q: 'How do you check it?',
+    opts: [
+      { x: 'The cart is sealed and the seal is intact, so everything inside is fine. Sign the sheet.', pen: 30, fb: 'A seal says nobody opened the cart. It says nothing about the defibrillator battery, the pads or expiry dates. Codes fail on a flat battery and missing pads, and that gap will cost you time when the code starts.' },
+      { x: 'Switch the defibrillator on and run its self-test, confirm adult pads are connected and in date, the battery is charged and plugged in, oxygen and suction work, then sign.', ok: 1, log: 'Pre-code: crash cart and defibrillator checked, sheet signed',
+        fb: 'Readiness is checked every shift, not assumed:<ul><li>Defibrillator: self-test, charged battery, plugged in, printer paper.</li><li>Adult pads connected and in date, with a spare set on the cart.</li><li>Oxygen cylinder pressure, working suction, bag-mask with the right mask sizes.</li><li>Drug tray sealed and in date; checklist signed with name and time.</li></ul>' },
+      { x: 'Pharmacy checks the cart every month. No need to repeat it tonight.', pen: 25, fb: 'The monthly pharmacy check covers drugs and expiry dates. The defibrillator and airway equipment need a check every shift by the clinical team.' },
+      { x: 'Unplug the defibrillator so the battery does not overcharge.', pen: 30, fb: 'Defibrillators are designed to stay plugged in. An unplugged unit is how you meet a flat battery in the middle of a code.' }
+    ] },
+  { t: 0, off: 0, prep: 1, title: 'The 30-second huddle', rhythm: 'off', lead: 'PADS · LEADS OFF', v: ['--', '--', '--/--', '--'],
+    n: 2, team: { L: 'You: running the huddle', D: 'Triage nurse: at the huddle' },
+    story: 'The cart is ready. Your team for tonight is at the desk: nurses, a resident, a respiratory therapist. Nobody has talked about what happens if a patient arrests.',
+    q: 'How do you prepare the team?',
+    opts: [
+      { x: 'Assign the code roles by name now, with a backup compressor, and confirm everyone knows how to call the code and where the cart is.', ok: 1, log: 'Pre-code: huddle, six roles assigned by name',
+        fb: 'Roles decided before the code save the first minute of it:<ul><li>Name each role: Leader, Compressor, Airway, Monitor/Defib, IV/Meds, Recorder.</li><li>Name a second compressor: they swap every 2 minutes.</li><li>Confirm the code number or button, and where the cart and defibrillator are.</li><li>If you are short-staffed, say who doubles up on which role (see the staffing table).</li></ul>' },
+      { x: 'Roles depend on who turns up. Decide when it happens.', pen: 30, fb: 'Deciding during the arrest is how you get three people at the airway and nobody on the defibrillator. The first minute is lost to organising.' },
+      { x: 'The most senior doctor always does the compressions.', pen: 25, fb: 'The most senior clinician should lead, hands off. Compressions go to people who can deliver them well and rotate every 2 minutes.' },
+      { x: 'Only the doctors need roles. The nurses will follow orders.', pen: 25, fb: 'Most code roles are held by nurses and therapists. A role only works if the person holding it knows it in advance.' }
+    ] },
+  { t: 0, off: 0, prep: 1, title: 'Ready the bedside', rhythm: 'off', lead: 'PADS · LEADS OFF', v: ['--', '--', '--/--', '--'],
+    n: 2, team: { L: 'You: at the bedside', D: 'Triage nurse: next to you' },
+    story: 'Back at Bed 4. A 55-year-old with crushing chest pain is the kind of patient who arrests. You have a moment before taking the history.',
+    q: 'What do you make sure of at this bed?',
+    opts: [
+      { x: 'Nothing yet. History and ECG first; equipment only if he deteriorates.', pen: 30, fb: 'High-risk patients are prepared for before they deteriorate. Hunting for a bag-mask after the arrest costs compressions and ventilation.' },
+      { x: 'Move him to a normal cubicle so the resuscitation bed stays free.', pen: 30, fb: 'Crushing chest pain with sweating belongs in a monitored resuscitation bed. That is what the bed is for.' },
+      { x: 'Bag-mask with oxygen connected, working suction, a backboard, the defibrillator within reach, IV access, and the monitor leads going on now.', ok: 1, log: 'Pre-code: Bed 4 readied (bag-mask, suction, backboard, defibrillator)',
+        fb: 'Everything the first two minutes need is within arm’s reach:<ul><li>Bag-mask connected to oxygen; suction switched on and tested.</li><li>Backboard or the bed’s CPR mode, and space on both sides of the bed.</li><li>Defibrillator close enough for the pads to reach.</li><li>IV access and monitoring started early in any high-risk patient.</li></ul>' },
+      { x: 'Draw up epinephrine and amiodarone in advance, just in case.', pen: 20, fb: 'Pre-drawn, unlabelled syringes are a medication safety risk and get wasted. Drugs stay sealed on the cart in a known place and are drawn up when ordered.' }
+    ] },
+  { t: 0, off: 0, title: 'The collapse', rhythm: 'off', lead: 'PADS · LEADS OFF', v: ['--', '--', '--/--', '--'],
+    n: 2, team: { C: 'You: at the bedside', D: 'Triage nurse: next to you' },
+    story: 'You shake his shoulder and shout. No response. His breathing is occasional, irregular gasps, and you feel no carotid pulse within 10 seconds. The triage nurse is beside you.',
+    q: 'What is your first move?',
+    opts: [
+      { x: 'He is gasping, so he is breathing: oxygen by mask and observe.', pen: 40, ho: 1, fb: 'Agonal gasping is not normal breathing. It is a sign of cardiac arrest. Every minute without compressions lowers the chance of survival.' },
+      { x: 'Start chest compressions now. The nurse calls the code and brings the defibrillator.', ok: 1, log: 'Witnessed arrest. CPR started, code called',
+        team: { C: 'You: hard, fast compressions', D: 'Triage nurse: calls the code, fetches the defibrillator' },
+        fb: 'Correct. With two rescuers, one compresses and one gets help and the defibrillator. High-quality CPR:<ul><li>100–120 per minute, 5–6 cm deep, full chest recoil.</li><li>30 compressions to 2 breaths until an advanced airway is in.</li><li>Change compressor every 2 minutes, with minimal pauses.</li></ul>' },
+      { x: 'Give two rescue breaths first, then set up to intubate.', pen: 30, ho: 1, fb: 'The sequence is C-A-B: compressions first. Intubation never comes before compressions or the first shock.' },
+      { x: 'Attach the monitor first and wait to see the rhythm before doing anything.', pen: 35, ho: 1, fb: 'Do not wait for the monitor. Start compressions at once; the pads go on while someone is compressing.' }
+    ] },
+  { t: 60, off: 10, title: 'The team arrives', rhythm: 'off', lead: 'PADS · LEADS OFF', v: ['--', '--', '--/--', '--'],
+    n: 6, team: { L: 'Waiting for a role', C: 'Triage nurse: compressing for 1 minute, tiring', A: 'Waiting for a role', D: 'Waiting for a role', M: 'Waiting for a role', R: 'Waiting for a role' },
+    story: 'The code team runs in with the crash cart: four more staff. The triage nurse has taken over compressions. Six people are at the bed and everyone is looking at you.',
+    q: 'How do you deploy six people?',
+    opts: [
+      { x: 'You take over compressions and give orders from the chest. The others help wherever they see a need.', pen: 30, fb: 'A leader with hands on the chest loses the overall picture. Without assigned roles, tasks get duplicated or missed.' },
+      { x: 'Two to the airway to intubate now, two on IV access, one compressing. Recording can wait.', pen: 35, fb: 'Nobody is on the defibrillator, and the first shock is the priority. Early intubation is not. Without a recorder, drug and shock timing is lost.' },
+      { x: 'Triangle on the patient: Compressor at the chest, Airway at the head, Monitor/Defib opposite the compressor. IV/Meds at the arm, Timer/Recorder at the foot. You lead hands-off from the foot of the bed.', ok: 1, log: 'Six roles assigned. Pads on', team: FULL,
+        fb: 'Correct. Six roles, each with one owner:<ul><li>The triangle (Compressor, Airway, Monitor/Defib) stays on the patient and rotates the compressor every 2 minutes.</li><li>IV/Meds and Timer/Recorder work outside the triangle.</li><li>You stay hands-off so you can see the monitor, the team and the clock.</li><li>Closed-loop communication: name the person, give the order, hear it repeated back.</li></ul>' },
+      { x: 'Stop compressions for a moment so everyone can get into position and attach the monitor properly.', pen: 30, ho: 1, fb: 'Never pause CPR to get organised. The team sets up around ongoing compressions.' }
+    ] },
+  { t: 80, off: 10, title: 'Too many hands', rhythm: 'cpr', lead: 'PADS', v: ['---', '--', '--/--', '12'],
+    n: 7, nLabel: '14 on scene: too many', team: FULL,
+    story: 'Word of the code has spread. Eight more people push into the bay: residents, students, nurses from the next unit, a porter. They crowd around the bed, three of them are reaching for the airway, and you can hardly hear your Recorder.',
+    q: 'How do you clear the bedside?',
+    opts: [
+      { x: 'More hands help. Let everyone stay and find something useful to do.', pen: 30, fb: 'Crowding slows a code down: blocked access to the patient, duplicated tasks, noise, and orders nobody hears. More people does not mean better CPR.' },
+      { x: 'Say it once, clearly: only the six assigned roles stay at the bed. Two relief compressors and one runner wait behind the line. Everyone else leaves the bay, and one person takes the door.', ok: 1, log: 'Crowd cleared: six roles at the bed, relief compressors and runner behind the line', team: FULL, n: 6,
+        fb: 'Crowd control is the leader’s job:<ul><li>Six roles at the bedside, each with one owner. Nobody else touches the patient.</li><li>Extras with a purpose wait outside the triangle: relief compressors in a queue, one runner.</li><li>Everyone without a role leaves the bay. Give one person the door.</li><li>One voice gives orders, and the room stays quiet enough for closed-loop communication.</li><li>Keep both sides of the bed clear, with a path for the cart.</li></ul>' },
+      { x: 'Ignore them and concentrate on the monitor. They will sort themselves out.', pen: 25, fb: 'They will not. An unmanaged crowd gets louder and closer. Managing the room is part of leading the code.' },
+      { x: 'Stop compressions for a moment and ask everyone to introduce themselves so you can reassign roles.', pen: 30, ho: 1, fb: 'The roles are already assigned. Never pause compressions to organise the room.' }
+    ] },
+  { t: 100, off: 10, title: 'First rhythm check', rhythm: 'vf', lead: 'PADS', v: ['---', '--', '--/--', '13'],
+    n: 6, team: T({ L: 'You: read the rhythm aloud', C: 'Hands off, hovering over the chest', D: 'At the defibrillator, waiting for your call', R: 'Timing the pause: under 10 s' }),
+    story: 'Pads are on. You pause compressions briefly to analyse the rhythm. Look at the monitor.',
+    q: 'What is the rhythm, and what do you order?',
+    opts: [
+      { x: 'VF: one unsynchronised shock, 200 J biphasic, now.', ok: 1, log: 'Rhythm VF. Shock 1 (200 J)', shock: 'vf',
+        fb: 'Correct. VF is shockable. Use the manufacturer’s recommended energy (120–200 J biphasic); if unknown, use the maximum. Compressions continue while the defibrillator charges, then “all clear”.' },
+      { x: 'VF: epinephrine 1 mg first, then shock.', pen: 40, fb: 'In a shockable rhythm the shock is the treatment and no drug comes before it. Epinephrine follows the second shock.' },
+      { x: 'Asystole: not shockable, continue CPR.', pen: 30, fb: 'Look again: chaotic waves of changing amplitude with no QRS complexes. That is VF, not a flat line.' },
+      { x: 'Synchronised cardioversion at 100 J.', pen: 35, fb: 'Sync mode needs a QRS to track. In VF the device may never fire. This needs unsynchronised defibrillation.' }
+    ] },
+  { t: 120, off: 20, title: 'Straight after the shock', rhythm: 'vf', lead: 'PADS', v: ['---', '--', '--/--', '12'],
+    n: 6, team: T({ L: 'You: everyone is waiting for your order', C: 'Hands hovering, waiting', D: 'Shock 1 delivered' }),
+    story: 'Shock one is delivered. Everyone is staring at the monitor.',
+    q: 'What happens next?',
+    opts: [
+      { x: 'Check the carotid pulse to see whether the shock worked.', pen: 30, ho: 1, fb: 'No pulse check straight after a shock. Even if an organised rhythm returns, the heart needs compressions for the first minutes.' },
+      { x: 'Wait a few seconds to read the rhythm on the monitor.', pen: 25, ho: 1, fb: 'Every second of pause drops coronary perfusion pressure. The rhythm is read after 2 minutes of CPR.' },
+      { x: 'Resume compressions immediately for 2 minutes. IV access goes in during CPR.', ok: 1, log: 'CPR resumed. IV access', after: 'cpr', av: ['---', '--', '--/--', '15'],
+        team: T({ M: 'Placing the IV, epinephrine drawn up', R: 'Next rhythm check in 2:00' }),
+        fb: 'Correct. Straight back on the chest for 2 minutes, with no pulse or rhythm check. During the cycle: IV/IO access, epinephrine drawn up, and EtCO2 watched as a marker of compression quality.' },
+      { x: 'Deliver a second shock straight away.', pen: 30, ho: 1, fb: 'Stacked shocks are not part of the algorithm. One shock, then 2 minutes of CPR.' }
+    ] },
+  { t: 255, off: 30, title: 'The first drug', rhythm: 'vf', seq: 'cpr', lead: 'PADS', v: ['---', '--', '--/--', '15'],
+    n: 6, team: T({ C: 'Rotation 2: fresh compressor from the triangle', M: 'IV in, waiting for your drug order' }),
+    story: 'Two minutes later the rhythm is still VF. Shock two is delivered and compressions resume with a fresh compressor. The IV is in.',
+    q: 'Which drug do you order now?',
+    opts: [
+      { x: 'Amiodarone 300 mg IV.', pen: 25, fb: 'The antiarrhythmic comes after the third shock. This is the moment for epinephrine.' },
+      { x: 'Atropine 1 mg IV.', pen: 30, fb: 'Atropine is for bradycardia with a pulse. It has no role in cardiac arrest.' },
+      { x: 'Vasopressin 40 units IV.', pen: 25, fb: 'Vasopressin was removed from the cardiac arrest algorithm. It offers no advantage over epinephrine.' },
+      { x: 'Epinephrine 1 mg IV/IO, repeated every 3–5 minutes.', ok: 1, log: 'Shock 2. Epinephrine 1 mg IV',
+        team: T({ C: 'Rotation 2: fresh compressor from the triangle', M: 'Epinephrine 1 mg given, 20 mL flush', R: 'Epinephrine timer started: next dose in 3–5 min' }),
+        fb: 'Correct. Epinephrine 1 mg after the second shock, followed by a 20 mL saline flush, repeated every 3–5 minutes (in practice, every second cycle). The Recorder tracks the interval.' }
+    ] },
+  { t: 390, off: 40, title: 'Shock-refractory VF', rhythm: 'vf', seq: 'cpr', lead: 'PADS', v: ['---', '--', '--/--', '14'],
+    n: 6, team: T({ C: 'Rotation 3: fresh compressor from the triangle', M: 'Waiting for your drug order' }),
+    story: 'Another two minutes: still VF. Shock three is delivered and compressions resume.',
+    q: 'What do you add now?',
+    opts: [
+      { x: 'Amiodarone 300 mg IV/IO bolus (or lidocaine 1–1.5 mg/kg).', ok: 1, log: 'Shock 3. Amiodarone 300 mg IV',
+        team: T({ C: 'Rotation 3: fresh compressor from the triangle', A: 'Preparing an advanced airway with waveform capnography', M: 'Amiodarone 300 mg given' }),
+        fb: 'Correct. First dose 300 mg bolus; second dose 150 mg if the rhythm persists. The alternative is lidocaine 1–1.5 mg/kg, then 0.5–0.75 mg/kg. Now is also the time to consider an advanced airway with waveform capnography.' },
+      { x: 'Amiodarone 150 mg infused over 10 minutes.', pen: 25, fb: 'That is the dose for a stable tachycardia with a pulse. In cardiac arrest it is a 300 mg rapid bolus.' },
+      { x: 'Magnesium sulfate 2 g IV.', pen: 25, fb: 'Magnesium is for torsades de pointes only. It is not routine in VF.' },
+      { x: 'Stop shocking: the rhythm is not responding.', pen: 40, fb: 'VF stays shockable for as long as it is there. Keep shocking every 2 minutes, with drugs and a search for the cause.' }
+    ] },
+  { t: 525, off: 50, title: 'The rhythm changes', rhythm: 'pea', lead: 'PADS', v: ['42', '--', '--/--', '14'],
+    n: 6, team: T({ L: 'You: the team is waiting for your call', C: 'Hands off, hovering', D: 'Watching the monitor', R: 'Timing the pause' }),
+    story: 'Brief pause for the rhythm check after two minutes. The monitor now shows a slow, organised rhythm.',
+    q: 'What do you do?',
+    opts: [
+      { x: 'The heart is back: stop CPR and start post-arrest care.', pen: 40, ho: 1, fb: 'An organised rhythm on the monitor does not mean there is a pulse. Check the pulse first.' },
+      { x: 'Fourth shock at 200 J.', pen: 35, ho: 1, fb: 'This is an organised rhythm, not VF or pulseless VT. Non-shockable rhythms are not shocked.' },
+      { x: 'Check the pulse (10 seconds at most). No pulse means PEA: CPR, epinephrine, and a search for the cause.', ok: 1, log: 'Rhythm PEA (no pulse). CPR + epinephrine 1 mg', after: 'cpr', av: ['---', '--', '--/--', '16'],
+        team: T({ L: 'You: run the H’s and T’s aloud with the team', C: 'Rotation 5: fresh compressor from the triangle', M: 'Epinephrine 1 mg given' }),
+        fb: 'Correct. No pulse with an organised rhythm is PEA. No shock; treat the reversible causes:<ul><li>H’s: hypovolemia, hypoxia, hydrogen ion (acidosis), hypo/hyperkalemia, hypothermia.</li><li>T’s: tension pneumothorax, tamponade, toxins, thrombosis (pulmonary), thrombosis (coronary).</li></ul>In this patient, with crushing chest pain, coronary thrombosis is the most likely cause.' },
+      { x: 'Atropine, and set up transcutaneous pacing.', pen: 30, fb: 'That treats bradycardia with a pulse. This patient has no pulse: CPR, epinephrine, and treat the cause.' }
+    ] },
+  { t: 660, off: 60, title: 'A pulse is back', rhythm: 'rosc', lead: 'II', v: ['108', '94', '92/58', '42'],
+    n: 6, team: { L: 'You: lead the post-arrest plan', C: 'Stood down, stays at the bedside in case of re-arrest', A: 'Ventilating, watching SpO2', D: 'Monitor on, pads stay on', M: 'Rechecking blood pressure, securing lines', R: 'ROSC time logged' },
+    story: 'During compressions EtCO2 jumps from 16 to 42. You pause to check: a clear carotid pulse. The patient does not follow commands.',
+    q: 'What are your priorities now?',
+    opts: [
+      { x: '100% oxygen and fast ventilation to make up for the hypoxia.', pen: 25, fb: 'Hyperoxia and hyperventilation both harm the brain after arrest. Aim for SpO2 92–98% and about 10 breaths per minute.' },
+      { x: '12-lead ECG, SpO2 92–98%, MAP 65 or above, temperature control, and activate the cath lab if STEMI.', ok: 1, log: 'ROSC. 12-lead ECG, cath lab activated',
+        fb: 'Correct. Post-cardiac arrest care:<ul><li>12-lead ECG at once; emergent coronary angiography for STEMI (note the ST elevation on the monitor).</li><li>SpO2 92–98% and no hyperventilation (PaCO2 35–45 mmHg).</li><li>SBP 90 or above, or MAP 65 or above, with fluids or vasopressors.</li><li>Temperature control and fever prevention for patients who do not follow commands, then critical care.</li></ul>' },
+      { x: 'He is stable: transfer straight to the ward.', pen: 30, fb: 'A post-arrest patient is unstable and at high risk of re-arrest. He goes to the cath lab or critical care after a full assessment.' },
+      { x: 'One more epinephrine 1 mg IV, to be safe.', pen: 30, fb: 'The arrest dose is never given to a patient with a pulse. It can cause arrhythmia and severe hypertension. If the pressure falls, use a titrated vasopressor infusion.' }
+    ] }
+];
+
+const PREP = SCENES.filter((s) => s.prep).length;
+const $ = (id) => document.getElementById(id);
+const S = { i: -1, pen: 0, ho: 0, t0: 0, tries: 0, tried: [], res: [], rhythm: 'off', shockAt: 0, afterShock: null, muted: false, done: false, endT: 0, lastBeat: -1, lastTick: -1, cprStart: 0 };
+let ac = null;
+
+function tone(f, d, type, g, f2) {
+  if (S.muted || !ac) return;
+  const o = ac.createOscillator(), a = ac.createGain(), n = ac.currentTime;
+  o.type = type || 'sine'; o.frequency.setValueAtTime(f, n);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, n + d);
+  a.gain.setValueAtTime(g || 0.05, n); a.gain.exponentialRampToValueAtTime(0.0001, n + d);
+  o.connect(a); a.connect(ac.destination); o.start(); o.stop(n + d);
+}
+$('sndBtn').onclick = () => { S.muted = !S.muted; $('sndBtn').textContent = S.muted ? 'SOUND OFF' : 'SOUND ON'; };
+
+const fmt = (s) => { s = Math.max(0, Math.floor(s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+const now = () => performance.now() / 1000;
+function codeTime() {
+  if (S.i < 0) return 0;
+  if (S.done) return S.endT;
+  if (SCENES[S.i].prep) return 0;
+  return SCENES[S.i].t + S.pen + Math.min(now() - S.t0, 45);
+}
+/* Chest compression fraction: planned pauses so far plus every wrong call that kept hands off the chest. */
+function ccf() {
+  const ct = codeTime();
+  if (S.i < PREP + 2 || ct < 1) return null;
+  return Math.max(0, Math.round(100 * (1 - (SCENES[S.i].off + S.ho) / ct)));
+}
+/* Patient reserve: a training score, not a survival statistic. Every 3 s lost costs one point; under 60 the code fails. */
+const reserve = () => Math.max(0, 100 - Math.round(S.pen / 3));
+const stamp = (kind) => '<svg class="stamp ' + kind + '" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29"></circle><path d="' + (kind === 'ok' ? 'M19 33l9 9 17-19' : 'M22 22l20 20M42 22L22 42') + '"></path></svg>';
+function setV(v) { $('vHr').textContent = v[0]; $('vSp').textContent = v[1]; $('vBp').textContent = v[2]; $('vEt').textContent = v[3]; }
+function addLog(text) {
+  const ol = $('log');
+  if (ol.firstElementChild && ol.firstElementChild.className === 'empty') ol.innerHTML = '';
+  const li = document.createElement('li');
+  li.innerHTML = '<time>' + fmt(codeTime()) + '</time><span></span>';
+  li.lastChild.textContent = text;
+  ol.appendChild(li);
+}
+function setTeam(team, n, label) {
+  $('teamN').textContent = label || (n ? n + ' on scene' : 'Bed 4');
+  $('roles').innerHTML = ROLES.map(([c, name]) => {
+    const on = team && team[c];
+    $('pos-' + c).classList.toggle('on', !!on);
+    return '<li class="' + (on ? '' : 'off') + '"><span class="code">' + c + '</span><span><b>' + name + '</b><br><span class="t">' + (on || 'Not here yet') + '</span></span></li>';
+  }).join('');
+  document.querySelectorAll('.staff tr').forEach((tr) => tr.classList.toggle('now', +tr.dataset.n === n));
+}
+
+/* Rhythm generators: t in seconds, output roughly -1..1 */
+const TAU = Math.PI * 2;
+const g = (dt, a, m, s) => a * Math.exp(-((dt - m) * (dt - m)) / (2 * s * s));
+const RATE = { pea: 42, rosc: 108 };
+function wave(t) {
+  if (S.shockAt) {
+    const d = t - S.shockAt;
+    if (d < 0.12) return (d < 0.05 ? 1.5 : -1.2) * (1 - d / 0.12);
+    if (d < 0.8) return 0;
+    S.shockAt = 0;
+    if (S.afterShock) { S.rhythm = S.afterShock; S.afterShock = null; }
+  }
+  switch (S.rhythm) {
+    case 'vf': {
+      const a = 0.5 + 0.25 * Math.sin(0.7 * t) + 0.15 * Math.sin(1.9 * t + 1);
+      return a * (0.7 * Math.sin(TAU * 5.1 * t + 1.5 * Math.sin(TAU * 0.6 * t)) + 0.3 * Math.sin(TAU * 8.3 * t + 0.7) + 0.2 * Math.sin(TAU * 2.7 * t));
+    }
+    case 'cpr':
+      return 0.7 * Math.sin(TAU * 1.83 * t) + 0.2 * Math.sin(TAU * 3.66 * t + 0.5) + 0.05 * Math.sin(TAU * 11 * t);
+    case 'pea': {
+      const dt = t % (60 / RATE.pea);
+      return g(dt, 0.6, 0.25, 0.03) + g(dt, -0.3, 0.34, 0.04) + g(dt, 0.15, 0.6, 0.07);
+    }
+    case 'rosc': {
+      const dt = t % (60 / RATE.rosc);
+      return g(dt, 0.1, 0.08, 0.02) + g(dt, -0.08, 0.175, 0.008) + g(dt, 0.95, 0.2, 0.011) + g(dt, -0.2, 0.225, 0.011) + g(dt, 0.26, 0.28, 0.03) + g(dt, 0.32, 0.37, 0.04);
+    }
+    default: return 0;
+  }
+}
+
+/* Sweep-style monitor trace */
+const cv = $('ecg'), cx = cv.getContext('2d');
+let W = 0, H = 0, px = 0, lastT = 0, lastY = 0, shownCpr = null;
+const ECG = getComputedStyle(document.documentElement).getPropertyValue('--ecg').trim();
+function size() {
+  const dpr = window.devicePixelRatio || 1;
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.max(1, W * dpr); cv.height = Math.max(1, H * dpr);
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  px = 0; lastT = now(); lastY = H * 0.55;
+}
+window.addEventListener('resize', size);
+function frame() {
+  const t = now();
+  if (W > 0) {
+    const speed = W / 6, dt = Math.min(t - lastT, 0.1), steps = Math.max(1, Math.ceil(dt * speed));
+    cx.strokeStyle = ECG; cx.lineWidth = 1.8; cx.lineJoin = 'round';
+    for (let k = 1; k <= steps; k++) {
+      const tt = lastT + (dt * k) / steps, nx = px + (dt * speed) / steps;
+      const y = H * 0.55 - wave(tt) * H * 0.3;
+      cx.clearRect(nx, 0, 14, H);
+      cx.beginPath(); cx.moveTo(px, lastY); cx.lineTo(nx, y); cx.stroke();
+      px = nx; lastY = y;
+      if (px >= W) { px = 0; cx.clearRect(0, 0, 14, H); }
+    }
+    const r = RATE[S.rhythm];
+    if (r && !S.shockAt) {
+      const b = Math.floor((t - 0.2) / (60 / r));
+      if (b !== S.lastBeat) { S.lastBeat = b; tone(S.rhythm === 'rosc' ? 880 : 660, 0.07, 'sine', 0.04); }
+    }
+  }
+  lastT = t;
+  const isCpr = S.rhythm === 'cpr' && !S.shockAt;
+  if (isCpr !== shownCpr) { shownCpr = isCpr; $('cprChip').hidden = !isCpr; if (isCpr) S.cprStart = t; }
+  if (isCpr) {
+    const left = 120 - (t - S.cprStart);
+    $('cprTxt').textContent = left > 0 ? 'CPR · rhythm check in ' + fmt(left).slice(1) : 'CPR · rhythm check due';
+    const k = Math.floor(t * 1.83);
+    if (k !== S.lastTick) { S.lastTick = k; tone(1400, 0.02, 'square', 0.012); }
+  }
+  $('clock').textContent = fmt(codeTime());
+  const c = ccf(), el = $('ccf');
+  el.textContent = c === null ? '--' : c + '%';
+  el.className = c === null ? '' : c >= 80 ? 'g' : c >= 60 ? 'a' : 'r';
+  const rv = reserve();
+  $('rsv').textContent = rv + '%';
+  $('rsv').className = rv >= 80 ? 'g' : rv >= 60 ? 'a' : 'r';
+  requestAnimationFrame(frame);
+}
+
+function shock(next, sceneIdx) {
+  tone(400, 0.9, 'sawtooth', 0.025, 1800);
+  setTimeout(() => {
+    if (S.i !== sceneIdx) return;
+    S.afterShock = next; S.shockAt = now();
+    tone(90, 0.25, 'square', 0.1);
+    const f = $('flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+  }, 900);
+}
+
+/* Screens */
+const card = $('card');
+function stepsHtml() {
+  return '<div class="steps" aria-hidden="true">' + SCENES.map((_, k) => {
+    const r = S.res[k];
+    return '<i class="' + (r === undefined ? (k === S.i ? 'now' : '') : (r === 0 ? 'done' : 'miss')) + '"></i>';
+  }).join('') + '</div>';
+}
+function intro() {
+  setTeam(null, 0);
+  card.className = 'card panel';
+  card.innerHTML =
+    '<span class="eyebrow">Training case for physicians and nurses · ACLS adult cardiac arrest algorithm</span>' +
+    '<h1>Emergency Department, Bed 4</h1>' +
+    '<p class="story">A 55-year-old man, diabetic and a smoker, came in with one hour of crushing chest pain and sweating. While you are taking the history, before he is on the monitor, he goes silent and his head drops.</p>' +
+    '<p class="story">You are the team leader. You have ' + SCENES.length + ' decisions to make: the first three are about preparation before the code, the rest are the code itself. The goal is a calm bedside: six clear roles and no crowding around the patient. Every wrong call adds lost time to the code clock, and time with hands off the chest pulls down your compression fraction (CCF). Read the monitor yourself: nobody names the rhythm for you. The bed map shows who is at the bedside and what each role is doing.</p>' +
+    '<button class="go" id="startBtn" type="button">Start the case</button>';
+  $('startBtn').onclick = () => {
+    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) { ac = null; }
+    S.pen = 0; S.ho = 0; S.res = []; S.done = false;
+    $('log').innerHTML = '';
+    go(0);
+  };
+}
+function go(i) {
+  S.i = i; S.t0 = now(); S.tries = 0; S.shockAt = 0; S.afterShock = null;
+  const sc = SCENES[i];
+  if (i === PREP) addLog('Patient collapses');
+  S.rhythm = sc.rhythm; setV(sc.v); $('lead').textContent = sc.lead; setTeam(sc.team, sc.n, sc.nLabel);
+  if (sc.seq) setTimeout(() => { if (S.i === i && S.rhythm === sc.rhythm) shock(sc.seq, i); }, 2200);
+  S.tried = [];
+  ask(i);
+}
+function ask(i) {
+  const sc = SCENES[i];
+  card.className = 'card panel';
+  card.innerHTML = stepsHtml() +
+    '<span class="eyebrow">' + (sc.prep ? 'Before the code · ' : '') + 'Decision ' + (i + 1) + ' of ' + SCENES.length + '</span>' +
+    '<h1>' + sc.title + '</h1><p class="story">' + sc.story + '</p><p class="q">' + sc.q + '</p>' +
+    '<div class="opts">' + sc.opts.map((o, k) => {
+      const used = S.tried.includes(k);
+      return '<button class="opt' + (used ? ' wrong' : '') + '" type="button" id="opt-' + k + '"' + (used ? ' disabled' : '') + '>' + o.x + '</button>';
+    }).join('') + '</div>';
+  sc.opts.forEach((o, k) => { $('opt-' + k).onclick = () => pick(i, k); });
+  card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+/* Every choice gets its own verdict screen: what it did to the patient, then why. */
+function pick(i, k) {
+  const sc = SCENES[i], o = sc.opts[k], last = i === SCENES.length - 1;
+  const head = (kind, title) => stepsHtml() +
+    '<div class="verdict">' + stamp(kind) + '<div><span class="eyebrow">Decision ' + (i + 1) + ' of ' + SCENES.length + ' · ' + sc.title + '</span><h1>' + title + '</h1></div></div>' +
+    '<p class="chose">Your order: ' + o.x + '</p>';
+  if (!o.ok) {
+    S.tries++; S.tried.push(k); S.pen += o.pen; if (o.ho) S.ho += o.pen;
+    tone(180, 0.25, 'square', 0.04);
+    card.className = 'card panel is-no';
+    card.innerHTML = head('no', 'Wrong call') +
+      '<div class="score">' +
+        '<div><b>+' + o.pen + ' s</b><span>' + (o.ho ? 'hands off the chest: no blood flow to brain or heart' : 'lost before the right treatment') + '</span></div>' +
+        '<div><b>' + reserve() + '%</b><span>patient reserve left</span></div>' +
+      '</div>' +
+      '<div class="fb no"><strong>Why it fails</strong>' + o.fb + '</div>' +
+      '<button class="go" id="retryBtn" type="button">Back to the decision</button>';
+    $('retryBtn').onclick = () => ask(i);
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  S.res[i] = S.tries;
+  addLog(o.log);
+  if (o.shock) shock(o.shock, i);
+  if (o.after) S.rhythm = o.after;
+  if (o.av) setV(o.av);
+  if (o.team) setTeam(o.team, o.n || sc.n);
+  tone(660, 0.12, 'sine', 0.05, 990);
+  card.className = 'card panel is-ok';
+  card.innerHTML = head('ok', S.tries ? 'Right call' : 'Right call, first time') +
+    '<div class="score">' +
+      '<div><b>' + fmt(codeTime()) + '</b><span>on the code clock, logged</span></div>' +
+      '<div><b>' + reserve() + '%</b><span>patient reserve</span></div>' +
+    '</div>' +
+    '<div class="fb ok"><strong>Why it works</strong>' + o.fb + '</div>' +
+    '<button class="go" id="nextBtn" type="button">' + (last ? 'Show my debrief' : 'Next decision') + '</button>';
+  $('nextBtn').onclick = () => (last ? finish() : go(i + 1));
+  card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function finish() {
+  const c = ccf();
+  S.endT = codeTime(); S.done = true;
+  const first = S.res.filter((r) => r === 0).length;
+  const pass = reserve() >= 60;
+  tone(pass ? 660 : 220, 0.5, pass ? 'sine' : 'square', 0.05, pass ? 1320 : 110);
+  card.className = 'card panel ' + (pass ? 'is-ok' : 'is-no');
+  card.innerHTML = stepsHtml() +
+    '<div class="verdict">' + stamp(pass ? 'ok' : 'no') + '<div><span class="eyebrow">Debrief · Bed 4</span><h1>' + (pass ? 'Code successful' : 'Code failed') + '</h1></div></div>' +
+    '<p class="story">' + (pass
+      ? (first === SCENES.length ? 'A textbook code. ' : 'Solid leadership, with points to review below. ') + 'Pulse back with good perfusion, and he reaches the cath lab in time.'
+      : 'A pulse came back, but too late. Too much time was lost to wrong calls, and survival with good brain function is unlikely. Review the points below and run it again.') + '</p>' +
+    '<div class="score">' +
+      '<div><b>' + reserve() + '%</b><span>patient reserve (60% or more to pass)</span></div>' +
+      '<div><b>' + first + '/' + SCENES.length + '</b><span>decisions right on the first call</span></div>' +
+      '<div><b>' + c + '%</b><span>compression fraction (target 80% or more)</span></div>' +
+      '<div><b>+' + S.pen + ' s</b><span>lost to wrong calls</span></div>' +
+      '<div><b>' + fmt(S.endT) + '</b><span>collapse to post-arrest care</span></div>' +
+    '</div>' +
+    '<ul class="review">' + SCENES.map((sc, k) => '<li><span>' + (k + 1) + '. ' + sc.title + '</span><span class="' + (S.res[k] ? 'n' : 'y') + '">' + (S.res[k] ? S.res[k] + ' wrong ' + (S.res[k] > 1 ? 'calls' : 'call') : 'first call') + '</span></li>').join('') + '</ul>' +
+    '<button class="go" id="againBtn" type="button">Run the case again</button>' +
+    '<p class="note">Based on the AHA ACLS adult cardiac arrest algorithm. For training only: check it against the current guideline edition adopted by your facility before use.</p>';
+  $('againBtn').onclick = () => {
+    S.i = -1; S.done = false; S.rhythm = 'off'; setV(['--', '--', '--/--', '--']); $('lead').textContent = 'PADS · LEADS OFF';
+    $('log').innerHTML = '<li class="empty">Every action is logged here with its time.</li>';
+    intro();
+  };
+}
+
+size(); intro(); requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
