@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Code Yellow Simulation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Great+Vibes&display=swap">
+<style>
+/* Layout: incident board and a schematic ED map on one side, the decision card and the tracking board on the other; one column on a phone with the card straight after the board. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --panel: #121922;
+  --screen: #070a0e;
+  --line: #263240;
+  --fg: #e6ebf0;
+  --muted: #8f9cab;
+  --yellow: #f2c230;
+  --red: #ff5f57;
+  --amber: #f2c230;
+  --green: #43d17f;
+  --black: #9aa4ae;
+  --blue: #5bb8f5;
+  --ok: #43d17f;
+  --bad: #ff5f57;
+  --font-display: "Bricolage Grotesque", "IBM Plex Sans Arabic", "IBM Plex Sans", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "IBM Plex Sans Arabic", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+:root[lang="ar"] { --font-display: "IBM Plex Sans Arabic", "Geeza Pro", Arial, sans-serif; --font-body: "IBM Plex Sans Arabic", "Geeza Pro", Arial, sans-serif; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.65; }
+.app {
+  max-width: 1160px; margin: 0 auto; padding-block: 16px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
+}
+.app > * { min-width: 0; }
+@media (min-width: 920px) {
+  .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "board card" "map card" "map log"; grid-template-rows: auto auto 1fr; align-items: start; }
+  .board { grid-area: board; } .card { grid-area: card; } .mapp { grid-area: map; } .sheet { grid-area: log; }
+}
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+h2 { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: 0.02em; margin: 0; }
+
+/* Incident board */
+.board { background: var(--screen); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.b-top { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.b-top b { color: var(--fg); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; margin-inline-start: 6px; }
+.b-top b, .z b, .z small { direction: ltr; unicode-bidi: isolate; }
+#ctl.g { color: var(--ok); } #ctl.a { color: var(--amber); } #ctl.r { color: var(--bad); }
+.lang { font: 600 13px var(--font-body); color: var(--screen); background: var(--yellow); border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+.lang:hover { filter: brightness(1.1); }
+.banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: repeating-linear-gradient(-45deg, rgba(242,194,48,0.14) 0 12px, transparent 12px 24px); border-bottom: 1px solid var(--line); font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--yellow); }
+.banner i { width: 10px; height: 10px; border-radius: 50%; background: var(--yellow); flex: none; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+.banner.idle { color: var(--muted); background: none; } .banner.idle i { background: var(--muted); animation: none; }
+.zones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.z { padding: 8px 10px; border-inline-end: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.z:last-child { border-inline-end: 0; }
+.z span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.z b { font-family: var(--font-data); font-size: 22px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.z small { font-family: var(--font-data); font-size: 11px; color: var(--muted); }
+.z.r b { color: var(--red); } .z.y b { color: var(--yellow); } .z.g b { color: var(--green); } .z.k b { color: var(--black); } .z.in b { color: var(--blue); }
+.z.bump b { animation: bump 0.5s ease-out; }
+@keyframes bump { 40% { transform: scale(1.3); } }
+@media (max-width: 520px) { .z { padding: 6px 6px; } .z b { font-size: 18px; } }
+
+/* ED map */
+.mapp { padding: 14px 16px 16px; display: grid; gap: 12px; }
+.m-head { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline; }
+.m-head span { font-size: 12px; color: var(--muted); }
+.map { width: 100%; max-width: 460px; height: auto; display: block; margin: 0 auto; }
+.map .area rect { fill: var(--screen); stroke: var(--line); stroke-width: 1.5; transition: fill 0.3s, stroke 0.3s; }
+.map .area text { fill: var(--muted); font: 600 11px var(--font-body); text-anchor: middle; }
+.map .area text.n { font: 600 10px var(--font-data); }
+.map .area.on rect { stroke-width: 2.5; }
+.map .area.on text { fill: var(--fg); }
+.map .red.on rect { fill: rgba(255,95,87,0.16); stroke: var(--red); }
+.map .yel.on rect { fill: rgba(242,194,48,0.14); stroke: var(--yellow); }
+.map .grn.on rect { fill: rgba(67,209,127,0.14); stroke: var(--green); }
+.map .blk.on rect { fill: rgba(154,164,174,0.16); stroke: var(--black); }
+.map .pool.on rect, .map .cmd.on rect, .map .tri.on rect { fill: rgba(91,184,245,0.14); stroke: var(--blue); }
+.map .lane { stroke: var(--line); stroke-width: 2; stroke-dasharray: 5 5; fill: none; }
+.map .gate { fill: var(--muted); font: 600 9px var(--font-body); text-anchor: middle; }
+.map .bay { stroke: none; }
+.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.rules li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.rules i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.rules b { font-weight: 600; } .rules span { color: var(--muted); }
+
+/* Tracking board */
+.sheet { padding: 12px 16px; }
+.sheet h2 { color: var(--muted); margin-bottom: 6px; }
+.sheet ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sheet li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; font-size: 14px; }
+.sheet time { font-family: var(--font-data); color: var(--yellow); font-variant-numeric: tabular-nums; direction: ltr; text-align: start; }
+.sheet li.empty { display: block; color: var(--muted); }
+
+/* Decision card */
+.card { padding: 20px; display: grid; gap: 14px; }
+.steps { display: flex; gap: 6px; align-items: center; }
+.steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.steps i.done { background: var(--ok); } .steps i.miss { background: var(--bad); } .steps i.now { background: var(--yellow); }
+.eyebrow { font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1.25; margin: 0; text-wrap: balance; }
+.story { margin: 0; max-width: 62ch; }
+.q { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 4px 0 0; color: var(--yellow); text-wrap: balance; }
+.opts { display: grid; gap: 10px; }
+.opt { font: inherit; color: var(--fg); text-align: start; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; line-height: 1.55; }
+.opt:hover:not(:disabled) { border-color: var(--yellow); }
+.opt:focus-visible, .go:focus-visible, .lang:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+.opt:disabled { cursor: default; opacity: 0.55; }
+.opt.wrong { border-color: var(--bad); opacity: 0.8; text-decoration: line-through; text-decoration-color: var(--bad); }
+.fb { border-radius: 8px; padding: 12px 14px; font-size: 15px; border: 1px solid var(--line); }
+.fb strong { display: block; font-family: var(--font-display); font-size: 16px; margin-bottom: 2px; }
+.fb.ok strong { color: var(--ok); } .fb.no strong { color: var(--bad); }
+.fb ul { margin: 6px 0 0; padding-inline-start: 20px; }
+.go { font: inherit; font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--screen); background: var(--yellow); border: 0; border-radius: 8px; padding: 12px 22px; cursor: pointer; justify-self: start; }
+.go:hover { filter: brightness(1.1); }
+.score { display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.score div { display: flex; flex-direction: column; }
+.score b { font-family: var(--font-data); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; direction: ltr; text-align: start; }
+.score span { font-size: 13px; color: var(--muted); max-width: 22ch; }
+.review { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 15px; }
+.review li { display: flex; gap: 10px; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.review .y { color: var(--ok); } .review .n { color: var(--bad); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.card.is-ok { border-color: var(--ok); }
+.card.is-no { border-color: var(--bad); animation: shake 0.35s; }
+@keyframes shake { 20% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 80% { transform: translateX(-3px); } }
+.verdict { display: flex; gap: 14px; align-items: center; }
+.stamp { width: 60px; height: 60px; flex: none; animation: pop 0.35s ease-out; }
+.stamp circle { fill: none; stroke: currentColor; stroke-width: 3; }
+.stamp path { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.stamp.ok { color: var(--ok); } .stamp.no { color: var(--bad); }
+@keyframes pop { 0% { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+.chose { margin: 0; color: var(--muted); font-size: 14px; }
+.is-ok .score b { color: var(--ok); } .is-no .score b { color: var(--bad); }
+
+.sig { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--muted); letter-spacing: 0.04em; padding-top: 8px; direction: ltr; }
+.sig b { font-family: "Great Vibes", "Snell Roundhand", "Apple Chancery", cursive; font-weight: 400; font-size: 30px; letter-spacing: 0; color: var(--fg); margin-left: 6px; vertical-align: middle; }
+@media (prefers-reduced-motion: reduce) { .banner i, .stamp, .card.is-no, .z.bump b { animation: none; } }
+</style>
+
+<div class="app">
+  <div class="board" aria-live="polite">
+    <div class="b-top">
+      <span><span data-t="clockL"></span><b id="clock">--</b></span>
+      <span><span data-t="ctlL"></span><b id="ctl" class="g">100%</b></span>
+      <button class="lang" id="langBtn" type="button">English</button>
+    </div>
+    <div class="banner idle" id="banner"><i></i><span id="bannerTxt"></span></div>
+    <div class="zones">
+      <div class="z in"><span data-t="zIn"></span><b id="zIn">0</b><small>&nbsp;</small></div>
+      <div class="z r"><span data-t="zR"></span><b id="zR">0</b><small>/ 6</small></div>
+      <div class="z y"><span data-t="zY"></span><b id="zY">0</b><small>/ 13</small></div>
+      <div class="z g"><span data-t="zG"></span><b id="zG">0</b><small>/ 6+</small></div>
+      <div class="z k"><span data-t="zK"></span><b id="zK">0</b><small>&nbsp;</small></div>
+    </div>
+  </div>
+
+  <div class="card panel" id="card"></div>
+
+  <section class="mapp panel">
+    <div class="m-head"><h2 data-t="mapH"></h2><span data-t="mapNote"></span></div>
+    <svg class="map" id="map" viewBox="0 0 400 330" role="img"></svg>
+    <ul class="rules" id="rules"></ul>
+  </section>
+
+  <section class="sheet panel">
+    <h2 data-t="logH"></h2>
+    <ol id="log"></ol>
+  </section>
+
+  <footer class="sig">Designed by <b>Dr. Musawa</b></footer>
+</div>
+
+<script>
+/* Every string has an Arabic and an English version; L() picks the active one. */
+let LANG = 'ar';
+try { const s = localStorage.getItem('cy-lang'); if (s === 'en' || s === 'ar') LANG = s; } catch (e) {}
+const L = (o) => (typeof o === 'string' ? o : o[LANG]);
+
+const UI = {
+  clockL: { ar: 'منذ البلاغ', en: 'SINCE ALERT' },
+  ctlL: { ar: 'السيطرة', en: 'CONTROL' },
+  zIn: { ar: 'في الطريق', en: 'Inbound' },
+  zR: { ar: 'أحمر', en: 'Red' },
+  zY: { ar: 'أصفر', en: 'Yellow' },
+  zG: { ar: 'أخضر', en: 'Green' },
+  zK: { ar: 'أسود', en: 'Black' },
+  mapH: { ar: 'خريطة القسم أثناء الكود', en: 'The ED during Code Yellow' },
+  mapNote: { ar: 'رسم توضيحي، ليس بمقياس', en: 'schematic, not to scale' },
+  logH: { ar: 'لوحة التتبع (ضابط التتبع)', en: 'Tracking board (Tracking Officer)' },
+  logEmpty: { ar: 'كل إجراء يُسجَّل هنا مع وقته.', en: 'Every action is logged here with its time.' },
+  idle: { ar: 'لا يوجد كود مفعّل', en: 'No code active' },
+  active: { ar: 'الكود الأصفر مفعّل · إصابات جماعية', en: 'CODE YELLOW ACTIVE · Mass casualty incident' },
+  stood: { ar: 'تم إنهاء الكود الأصفر', en: 'Code Yellow stood down' },
+  min: { ar: 'د', en: 'min' },
+  decision: { ar: 'القرار', en: 'Decision' },
+  of: { ar: 'من', en: 'of' },
+  before: { ar: 'قبل وصول الإصابات · ', en: 'Before arrival · ' },
+  yourCall: { ar: 'قرارك: ', en: 'Your call: ' },
+  wrong: { ar: 'قرار خاطئ', en: 'Wrong call' },
+  right: { ar: 'قرار صحيح', en: 'Right call' },
+  rightFirst: { ar: 'قرار صحيح من أول مرة', en: 'Right call, first time' },
+  lost: { ar: 'دقائق ضاعت قبل الإجراء الصحيح', en: 'minutes lost before the right action' },
+  ctlLeft: { ar: 'السيطرة المتبقية على الحدث', en: 'control of the incident left' },
+  whyNo: { ar: 'لماذا هذا خطأ', en: 'Why it fails' },
+  whyOk: { ar: 'لماذا هذا صحيح', en: 'Why it works' },
+  back: { ar: 'ارجع للقرار', en: 'Back to the decision' },
+  next: { ar: 'القرار التالي', en: 'Next decision' },
+  debrief: { ar: 'اعرض التقييم', en: 'Show my debrief' },
+  logged: { ar: 'على ساعة الحدث، مسجّل', en: 'on the incident clock, logged' },
+  start: { ar: 'ابدأ الحالة', en: 'Start the case' },
+  again: { ar: 'أعد الحالة', en: 'Run the case again' },
+  firstCall: { ar: 'من أول مرة', en: 'first call' },
+  wrongN: { ar: (n) => n + (n > 1 ? ' قرارات خاطئة' : ' قرار خاطئ'), en: (n) => n + ' wrong ' + (n > 1 ? 'calls' : 'call') },
+};
+
+const AREAS = {
+  grn: { ar: 'جراحة اليوم الواحد', en: 'Day surgery', sub: { ar: 'أخضر · 6+', en: 'GREEN · 6+' } },
+  red: { ar: 'الإنعاش', en: 'Resus', sub: { ar: 'أحمر · 6', en: 'RED · 6' } },
+  cmd: { ar: 'غرفة التحكم', en: 'Control room', sub: { ar: 'القيادة', en: 'Command' } },
+  pool: { ar: 'منطقة الانتظار', en: 'Waiting area', sub: { ar: 'تجمّع الطاقم', en: 'Staff pool' } },
+  yelW: { ar: 'نساء + أطفال', en: 'Women + Peds', sub: { ar: 'أصفر · 5+3', en: 'YELLOW 5+3' } },
+  yelM: { ar: 'طوارئ الرجال', en: "Men's ER", sub: { ar: 'أصفر · 5', en: 'YELLOW 5' } },
+  tri: { ar: 'الفرز الخارجي', en: 'Outdoor triage', sub: { ar: 'مدخل الإسعاف', en: 'Ambulance bay' } },
+  blk: { ar: 'ثلاجة الموتى', en: 'Morgue', sub: { ar: 'أسود', en: 'BLACK' } },
+};
+const RULES = [
+  ['var(--blue)', { ar: 'لا أحد يدخل منطقة إلا إذا استُدعي.', en: 'Nobody enters a zone unless called.' }, { ar: 'الطاقم الداعم ينتظر في منطقة الانتظار.', en: 'Support staff wait in the staff pool.' }],
+  ['var(--yellow)', { ar: 'الممر الأوسط للنقالات فقط.', en: 'The central lane is for stretchers only.' }, { ar: 'يبقى فارغاً طوال الكود.', en: 'It stays clear for the whole code.' }],
+  ['var(--red)', { ar: 'الأقدمية للأشد خطورة.', en: 'Seniority to the sickest.' }, { ar: 'الاستشاري والأخصائي حسب الحالة وشدتها.', en: 'Consultants and specialists by case and severity.' }],
+  ['var(--green)', { ar: 'مريض واحد، بطاقة واحدة.', en: 'One patient, one card.' }, { ar: 'رقم ملف مؤقت يُتابَع على اللوحة.', en: 'A temporary file number tracked on the board.' }],
+];
+
+/* Zone highlight keys: tri, red, yel (both yellow areas), grn, blk, pool, cmd */
+const SCENES = [
+  { t: 0, prep: 1, on: ['cmd'], b: [0, 0, 0, 0, 0], banner: 'idle',
+    title: { ar: 'البلاغ', en: 'The alert' },
+    story: { ar: 'الساعة 10 صباحاً. الهلال الأحمر يتصل بالطوارئ: حادث انقلاب حافلة على الطريق السريع. التقدير الأولي 18 مصاباً، أول سيارة إسعاف تصل خلال 15 دقيقة. أنت الطبيب المسؤول عن المناوبة.', en: 'It is 10 am. The Red Crescent calls the ED: a bus has rolled over on the highway. First estimate is 18 casualties, and the first ambulance arrives in 15 minutes. You are the physician in charge of the shift.' },
+    q: { ar: 'ما أول خطوة؟', en: 'What is your first move?' },
+    opts: [
+      { x: { ar: 'ننتظر وصول أول سيارة إسعاف ونتأكد من العدد قبل ما نفعّل أي شيء.', en: 'Wait for the first ambulance to confirm the numbers before activating anything.' }, pen: 6,
+        fb: { ar: 'الـ 15 دقيقة قبل الوصول هي أثمن وقت في الحدث كله: فيها يُفرَّغ القسم ويُجهَّز الفرز ويُستدعى الطاقم. الانتظار يعني أن الإصابات تصل إلى قسم ممتلئ وغير مستعد.', en: 'The 15 minutes before arrival are the most valuable time in the whole incident: that is when the ED is cleared, triage is set up and staff are called. Waiting means casualties arrive to a full, unprepared department.' } },
+      { x: { ar: 'تأكد من التفاصيل (العدد، نوع الحادث، وقت الوصول)، ثم فعّل الكود الأصفر عبر السنترال حسب الخطة، وأبلغ منسق الطوارئ والكوارث وقائد الحادث (المدير الطبي أو المناوب الإداري). مركز القيادة يفتح في غرفة التحكم.', en: 'Confirm the details (numbers, type of incident, arrival time), then activate Code Yellow through the switchboard as the plan says, and inform the Emergency & Disaster Coordinator and the Incident Commander (Medical Director or on-call). The command post opens in the control room.' }, ok: 1,
+        log: { ar: 'تفعيل الكود الأصفر: 18 مصاباً متوقعاً، الوصول خلال 15 دقيقة', en: 'Code Yellow activated: 18 casualties expected, arrival in 15 min' },
+        fb: { ar: 'التفعيل الرسمي يحرّك المستشفى كلها في نفس الوقت:<ul><li>السنترال يعلن الكود ويستدعي الفرق حسب القائمة.</li><li>قائد الحادث يتولى القيادة، ورئيس الطوارئ يصبح رئيس العمليات الطبية.</li><li>مركز القيادة في غرفة التحكم، ومنه تُدار الأسرّة والطاقم والتواصل.</li></ul>', en: 'A formal activation moves the whole hospital at once:<ul><li>The switchboard announces the code and calls the teams on the list.</li><li>The Incident Commander takes command; the Head of ED becomes Medical Operations Chief.</li><li>The command post sits in the control room and runs beds, staff and communication.</li></ul>' } },
+      { x: { ar: 'أرسل رسالة في قروب الواتساب لكل الأطباء والتمريض: تعالوا الطوارئ فوراً.', en: 'Send a WhatsApp message to every doctor and nurse: come to the ED now.' }, pen: 5,
+        fb: { ar: 'استدعاء الجميع بدون قيادة يملأ القسم بأشخاص بلا أدوار، ويترك الأجنحة بلا طاقم. الاستدعاء يكون عبر التفعيل الرسمي وقائمة الاستدعاء.', en: 'Calling everyone without command floods the ED with people who have no role and leaves the wards unstaffed. Call-in runs through the formal activation and its call list.' } },
+      { x: { ar: 'اذهب بنفسك مع سيارة الإسعاف إلى موقع الحادث لتقدير الوضع.', en: 'Go to the scene yourself with the ambulance to assess it.' }, pen: 6,
+        fb: { ar: 'مكانك في المستشفى. الموقع مسؤولية الهلال الأحمر، وخروجك يترك القسم بلا قائد في أهم لحظة.', en: 'Your place is in the hospital. The scene belongs to the Red Crescent, and leaving takes the ED’s leader away at the worst moment.' } },
+    ] },
+  { t: 3, prep: 1, on: ['red', 'yel', 'grn'], b: [18, 0, 0, 0, 0], banner: 'active',
+    title: { ar: 'تفريغ القسم', en: 'Clearing the ED' },
+    story: { ar: 'القسم ممتلئ تقريباً: 11 من 14 سريراً مشغولة. منها مريضان قرار تنويمهما صادر وينتظران سريراً، وثلاثة جاهزون للخروج، ومريض في الإنعاش مستقر بعد علاج نوبة ربو.', en: 'The ED is almost full: 11 of 14 beds are taken. Two patients are admitted and waiting for a ward bed, three are ready for discharge, and one patient in resus is stable after an asthma attack.' },
+    q: { ar: 'ماذا تفعل بالمرضى الحاليين؟', en: 'What do you do with the current patients?' },
+    opts: [
+      { x: { ar: 'لا شيء. الإصابات أولوية، والمرضى الحاليون يبقون في أسرّتهم.', en: 'Nothing. Casualties come first and current patients keep their beds.' }, pen: 6,
+        fb: { ar: 'بدون تفريغ، الإصابات الحمراء والصفراء لن تجد سريراً. خطة الكود تعتمد على 27 سريراً، وهذا لا يتحقق إلا بإخلاء القسم قبل الوصول.', en: 'Without clearing, red and yellow casualties will find no bed. The code plan depends on 27 beds, which only exist if the ED is emptied before arrival.' } },
+      { x: { ar: 'اصعد بالمنوَّمين إلى الأجنحة الآن، وأخرِج الجاهزين للخروج مع موعد متابعة، وانقل مريض الربو المستقر من الإنعاش. ابدأ بإخلاء الإنعاش أولاً.', en: 'Send the admitted patients up to the wards now, discharge those who are ready with a follow-up, and move the stable asthma patient out of resus. Empty resus first.' }, ok: 1,
+        log: { ar: 'تفريغ القسم: منوَّمان للأجنحة، 3 خروج، الإنعاش فارغ', en: 'ED cleared: 2 to wards, 3 discharged, resus empty' },
+        fb: { ar: 'التفريغ السريع يصنع المساحة قبل الحاجة:<ul><li>الإنعاش يُخلى أولاً لأنه مخصص للأحمر.</li><li>المنوَّمون يصعدون فوراً، والأجنحة تستقبل لأن الكود مفعّل.</li><li>الخروج يكون بعد مراجعة الطبيب ومع خطة متابعة واضحة.</li></ul>', en: 'Fast decompression makes space before it is needed:<ul><li>Resus is emptied first because it belongs to Red.</li><li>Admitted patients go up now; the wards accept because the code is active.</li><li>Discharges follow a physician review and a clear follow-up plan.</li></ul>' } },
+      { x: { ar: 'أخرِج كل المرضى الحاليين من القسم بدون استثناء.', en: 'Discharge every current patient, no exceptions.' }, pen: 5,
+        fb: { ar: 'المريض المحتاج للتنويم أو المراقبة لا يُخرَج بسبب الكود. التفريغ قرار طبي لكل مريض، وليس إخلاءً جماعياً.', en: 'A patient who needs admission or observation is not discharged because of a code. Decompression is a clinical decision per patient, not a mass eviction.' } },
+      { x: { ar: 'انقل كل المرضى الحاليين إلى منطقة الانتظار حتى ينتهي الكود.', en: 'Move all current patients into the waiting area until the code ends.' }, pen: 5,
+        fb: { ar: 'منطقة الانتظار هي مكان تجمّع الطاقم أثناء الكود، والممر الأوسط فيها للنقالات. ملؤها بالمرضى يسد الطريق ويخلط المرضى بالإصابات.', en: 'The waiting area is the staff pool during the code, and its central lane is for stretchers. Filling it with patients blocks the route and mixes them with casualties.' } },
+    ] },
+  { t: 6, prep: 1, on: ['pool'], b: [18, 0, 0, 0, 0], banner: 'active',
+    title: { ar: 'الطاقم يصل', en: 'Staff arrive' },
+    story: { ar: 'بدأ الطاقم يصل: تمريض من الأجنحة، أطباء مقيمون، أخصائي جراحة، فنيو أشعة، وحمّالون. الكل متحمس ويسأل: وين نروح؟', en: 'Staff are arriving: nurses from the wards, residents, a surgical specialist, radiographers and porters. Everyone is keen and asking where to go.' },
+    q: { ar: 'أين يذهب الطاقم الداعم؟', en: 'Where do the support staff go?' },
+    opts: [
+      { x: { ar: 'إلى الإنعاش، لأن الحالات الحرجة تحتاج أكبر عدد من الأيدي.', en: 'To resus, because critical cases need the most hands.' }, pen: 5,
+        fb: { ar: 'هذا بالضبط ما تمنعه الخطة: تكدّس الناس في الإنعاش يسد الوصول للمريض ويُضيّع الأوامر. كل سرير أحمر له فريق محدد مسبقاً.', en: 'This is exactly what the plan prevents: a crowd in resus blocks access to patients and drowns out orders. Each red bed has a team set in advance.' } },
+      { x: { ar: 'كلهم يتجمعون في منطقة الانتظار (تجمّع الطاقم) وينتظرون. لا أحد يدخل منطقة إلا إذا استدعاه رئيس العمليات أو منسق التمريض. الممر الأوسط يبقى فارغاً للنقالات.', en: 'Everyone gathers in the waiting area (staff pool) and waits. Nobody enters a zone unless called by the Ops Chief or the nursing coordinator. The central lane stays clear for stretchers.' }, ok: 1,
+        log: { ar: 'تجمّع الطاقم في منطقة الانتظار، الممر الأوسط مُخلى', en: 'Staff pool opened in the waiting area, central lane cleared' },
+        fb: { ar: 'تجمّع الطاقم يحوّل الأعداد إلى قوة منظمة:<ul><li>الكل في مكان واحد معروف، فيسهل الاستدعاء حسب الحاجة والتخصص.</li><li>المناطق تبقى هادئة ومنظمة.</li><li>الممر الأوسط محجوز للنقالات طوال الكود.</li></ul>', en: 'A staff pool turns numbers into an organised force:<ul><li>Everyone is in one known place, so they are called by need and specialty.</li><li>The zones stay calm and organised.</li><li>The central lane is kept for stretchers for the whole code.</li></ul>' } },
+      { x: { ar: 'كل شخص يختار المنطقة التي يرتاح للعمل فيها.', en: 'Let each person choose the zone they are comfortable in.' }, pen: 4,
+        fb: { ar: 'التوزيع الذاتي يعني منطقة مزدحمة وأخرى فارغة. التوزيع يكون من القيادة حسب الحاجة والنسب المحددة.', en: 'Self-allocation leaves one zone crowded and another empty. Allocation comes from command, by need and the set ratios.' } },
+      { x: { ar: 'إلى منطقة الفرز الخارجية لمساعدة فريق الفرز.', en: 'Out to the triage area to help the triage team.' }, pen: 4,
+        fb: { ar: 'فريق الفرز صغير ومحدد: طبيب وممرضان ومُسجِّل. الزحام عند الفرز يبطئ القرار ويربك تدفق النقالات.', en: 'The triage team is small and fixed: a physician, two nurses and a recorder. A crowd at triage slows decisions and jams the stretcher flow.' } },
+    ] },
+  { t: 9, prep: 1, on: ['tri'], b: [18, 0, 0, 0, 0], banner: 'active',
+    title: { ar: 'تجهيز الفرز', en: 'Setting up triage' },
+    story: { ar: 'باقي 6 دقائق على أول سيارة إسعاف. لازم تقرر مكان الفرز ومن يقوده.', en: 'Six minutes to the first ambulance. You need to decide where triage happens and who runs it.' },
+    q: { ar: 'كيف تجهّز الفرز؟', en: 'How do you set up triage?' },
+    opts: [
+      { x: { ar: 'الفرز داخل الإنعاش، حتى يكون الأطباء قريبين من الحالات الحرجة.', en: 'Triage inside resus, so the doctors are close to the critical cases.' }, pen: 5,
+        fb: { ar: 'الفرز داخل القسم يُدخل كل الإصابات، حتى البسيطة، إلى المكان المخصص للأحمر. الفرز يكون عند الباب وقبل الدخول.', en: 'Triage inside brings every casualty, even minor ones, into the space meant for Red. Triage happens at the door, before entry.' } },
+      { x: { ar: 'يقوم به طبيب الامتياز، لأن الأطباء الكبار مطلوبون في الإنعاش.', en: 'Give it to the intern, because the senior doctors are needed in resus.' }, pen: 5,
+        fb: { ar: 'الفرز أخطر قرار في الحدث: فرز خاطئ يرسل الحرج إلى الأخضر أو يملأ الإنعاش بحالات بسيطة. لذلك يقوده أقدم طبيب طوارئ.', en: 'Triage is the most consequential call in the incident: a wrong tag sends a critical patient to Green or fills resus with minor cases. That is why the most senior EM physician leads it.' } },
+      { x: { ar: 'في منطقة الفرز الخارجية عند مدخل الإسعاف. ضابط الفرز هو أقدم طبيب طوارئ، ومعه ممرضان ومُسجِّل. فرز START بالألوان، وتدفق باتجاه واحد إلى المناطق.', en: 'In the outdoor triage area at the ambulance entrance. The Triage Officer is the most senior EM physician, with two nurses and a recorder. START triage with colour tags, and one-way flow to the zones.' }, ok: 1,
+        log: { ar: 'الفرز الخارجي جاهز: ضابط الفرز + ممرضان + مُسجِّل', en: 'Outdoor triage ready: Triage Officer + 2 RN + recorder' },
+        fb: { ar: 'الفرز عند الباب يحمي القسم:<ul><li>كل مصاب يُفرز قبل أن يدخل، ويذهب مباشرة إلى منطقته.</li><li>الأخضر يذهب إلى جراحة اليوم الواحد من بوابتها ولا يدخل الطوارئ.</li><li>الأسود يذهب مباشرة إلى ثلاجة الموتى بجانب منطقة الفرز.</li></ul>', en: 'Triage at the door protects the department:<ul><li>Every casualty is tagged before entering and goes straight to their zone.</li><li>Green goes to day surgery through its own gate and never enters the ED.</li><li>Black goes directly to the morgue beside the triage area.</li></ul>' } },
+      { x: { ar: 'عند مكتب الاستقبال بعد تسجيل بيانات كل مصاب.', en: 'At the reception desk, after each casualty is registered.' }, pen: 5,
+        fb: { ar: 'التسجيل الكامل قبل الفرز يؤخر الحرج دقائق ثمينة. الفرز أولاً، ثم بطاقة برقم مؤقت، والتسجيل الكامل لاحقاً.', en: 'Full registration before triage costs a critical patient precious minutes. Triage first, then a card with a temporary number; full registration later.' } },
+    ] },
+  { t: 15, on: ['tri', 'grn'], b: [18, 0, 0, 0, 0], banner: 'active',
+    title: { ar: 'المصاب الأول', en: 'The first casualty' },
+    story: { ar: 'وصلت أول سيارتين. أول مصاب رجل في الثلاثينات ينزل ماشياً، عنده جرح في الساعد ينزف قليلاً، ويتكلم بشكل طبيعي.', en: 'The first two ambulances pull in. The first casualty is a man in his thirties who walks off the ambulance with a lightly bleeding forearm wound and talks normally.' },
+    q: { ar: 'ما لونه وإلى أين يذهب؟', en: 'What tag does he get, and where does he go?' },
+    opts: [
+      { x: { ar: 'أصفر، ويدخل طوارئ الرجال لخياطة الجرح.', en: 'Yellow, into the men’s ER to suture the wound.' }, pen: 4,
+        fb: { ar: 'في فرز START: من يمشي = أخضر. إدخاله لطوارئ الرجال يأخذ سريراً أصفر يحتاجه مصاب أخطر.', en: 'In START, anyone who walks is Green. Bringing him into the men’s ER takes a yellow bed a sicker casualty will need.' } },
+      { x: { ar: 'أخضر. يذهب ماشياً إلى جراحة اليوم الواحد عبر بوابتها الخاصة، ويُعاد فرزه هناك.', en: 'Green. He walks to day surgery through its own gate and is re-triaged there.' }, ok: 1, b: [16, 0, 0, 1, 0],
+        log: { ar: 'MCI-001 أخضر ← جراحة اليوم الواحد', en: 'MCI-001 Green → day surgery' },
+        fb: { ar: 'من يمشي يُفرز أخضر ويخرج من مسار الإصابات الثقيلة:<ul><li>جراحة اليوم الواحد هي المنطقة الخضراء، ولها بوابة مستقلة فلا يمر الأخضر داخل الطوارئ.</li><li>أخصائي باطنة يقود المنطقة ويعيد فرز الماشين.</li><li>إذا زاد العدد عن 6 أسرّة: كراسي وصالة انتظار بنفس الفريق، وممرضة لكل 4.</li></ul>', en: 'Anyone who walks is tagged Green and leaves the heavy-casualty stream:<ul><li>Day surgery is the Green zone and has its own gate, so Green never passes through the ED.</li><li>An internal medicine specialist leads it and re-triages the walking wounded.</li><li>Beyond 6 beds: chairs and the waiting lounge with the same team, one nurse per 4.</li></ul>' } },
+      { x: { ar: 'يجلس بجانب منطقة الفرز حتى ينتهي فرز الجميع.', en: 'Have him sit by the triage area until everyone is triaged.' }, pen: 3,
+        fb: { ar: 'الماشون يتراكمون بسرعة عند الفرز ويعيقون النقالات. يُوجَّهون فوراً إلى المنطقة الخضراء.', en: 'Walking wounded pile up fast at triage and block the stretchers. They are sent to Green straight away.' } },
+      { x: { ar: 'يُطلب منه الانتظار في منطقة الانتظار داخل القسم.', en: 'Ask him to wait in the ED waiting area.' }, pen: 4,
+        fb: { ar: 'منطقة الانتظار هي تجمّع الطاقم أثناء الكود، وممرها للنقالات. الأخضر لا يدخل الطوارئ أصلاً.', en: 'The waiting area is the staff pool during the code, with its lane for stretchers. Green does not enter the ED at all.' } },
+    ] },
+  { t: 17, on: ['tri', 'blk'], b: [16, 0, 0, 1, 0], banner: 'active',
+    title: { ar: 'لا يتنفس', en: 'Not breathing' },
+    story: { ar: 'المصاب التالي على نقالة: رجل لا يستجيب ولا يتنفس. فتحت مجرى الهواء بإمالة الرأس، ولا يزال لا يتنفس. خلفه أربع نقالات تنتظر.', en: 'Next casualty, on a stretcher: a man who does not respond and is not breathing. You open the airway with a head tilt, and he still does not breathe. Four stretchers wait behind him.' },
+    q: { ar: 'ما قرارك؟', en: 'What is your call?' },
+    opts: [
+      { x: { ar: 'ابدأ الإنعاش القلبي فوراً في منطقة الفرز.', en: 'Start CPR right there in triage.' }, pen: 6,
+        fb: { ar: 'في الإصابات الجماعية، إنعاش مصاب واحد بلا تنفس يأخذ فريقاً كاملاً لوقت طويل بفرصة نجاة ضعيفة جداً، بينما ينتظر خلفه مصابون يمكن إنقاذهم. هذا مبدأ الفرز: أكبر فائدة لأكبر عدد.', en: 'In a mass casualty incident, resuscitating one apnoeic casualty ties up a whole team for a long time with a very small chance of survival, while savable casualties wait behind him. That is the principle of triage: the greatest good for the greatest number.' } },
+      { x: { ar: 'أرسله للإنعاش، وهناك يقررون.', en: 'Send him to resus and let them decide.' }, pen: 5,
+        fb: { ar: 'سرير أحمر مشغول بمصاب متوفٍ يعني أن مصاباً أحمر قابلاً للإنقاذ لن يجد سريراً.', en: 'A red bed taken by a dead casualty means a savable red casualty will find none.' } },
+      { x: { ar: 'أسود. ينتقل مباشرة إلى ثلاجة الموتى بجانب منطقة الفرز، وطبيب ثانٍ يؤكد الوفاة ويوثقها لاحقاً. تنتقل فوراً للمصاب التالي.', en: 'Black. He goes directly to the morgue beside the triage area, and a second physician confirms and documents death later. You move straight to the next casualty.' }, ok: 1, b: [15, 0, 0, 1, 1],
+        log: { ar: 'MCI-002 أسود ← ثلاجة الموتى', en: 'MCI-002 Black → morgue' },
+        fb: { ar: 'فرز START: لا يتنفس بعد فتح مجرى الهواء = أسود:<ul><li>لا إنعاش في منطقة الفرز.</li><li>ينتقل مباشرة إلى ثلاجة الموتى، ولا يدخل القسم.</li><li>طبيب ثانٍ يؤكد الوفاة ويوثقها، وممرضة مع الأخصائي الاجتماعي للأهل.</li></ul>', en: 'START: not breathing after opening the airway = Black:<ul><li>No CPR in the triage area.</li><li>He goes directly to the morgue and never enters the ED.</li><li>A second physician confirms and documents death; a nurse and the social worker support the family.</li></ul>' } },
+      { x: { ar: 'أدخله غرفة التخطيط حتى يتوفر وقت لتقييمه.', en: 'Put him in the ECG room until there is time to assess him.' }, pen: 4,
+        fb: { ar: 'غرفة التخطيط للتخطيط فقط أثناء الكود. الأسود يذهب مباشرة إلى ثلاجة الموتى خارج القسم.', en: 'The ECG room is for ECGs only during the code. Black goes directly to the morgue outside the ED.' } },
+    ] },
+  { t: 19, on: ['tri', 'red'], b: [15, 0, 0, 1, 1], banner: 'active',
+    title: { ar: 'يتنفس بسرعة', en: 'Fast breathing' },
+    story: { ar: 'امرأة في الأربعينات على نقالة، واعية لكنها مشوشة قليلاً. معدل التنفس 34 في الدقيقة، النبض الكعبري ضعيف، وفيه كدمة كبيرة على البطن.', en: 'A woman in her forties on a stretcher, conscious but slightly confused. Respiratory rate 34, a weak radial pulse, and a large bruise across the abdomen.' },
+    q: { ar: 'ما لونها وإلى أين؟', en: 'What tag, and where does she go?' },
+    opts: [
+      { x: { ar: 'أصفر، لأنها واعية وتتكلم.', en: 'Yellow, because she is conscious and talking.' }, pen: 5,
+        fb: { ar: 'الوعي لا يكفي. في START: تنفس أكثر من 30 = أحمر مباشرة، بغض النظر عن الكلام.', en: 'Being conscious is not enough. In START, a respiratory rate over 30 is Red, whatever she says.' } },
+      { x: { ar: 'أحمر. تدخل الإنعاش عبر الممر الأوسط إلى سرير بفريقه: أخصائي طوارئ وممرضتان.', en: 'Red. She goes to resus through the central lane, to a bed with its own team: an EM specialist and two nurses.' }, ok: 1, b: [14, 1, 0, 1, 1],
+        log: { ar: 'MCI-003 أحمر ← الإنعاش R1', en: 'MCI-003 Red → resus R1' },
+        fb: { ar: 'START: التنفس أكثر من 30 = أحمر (وكذلك غياب النبض الكعبري أو امتلاء الشعيرات أكثر من ثانيتين أو عدم اتباع الأوامر):<ul><li>كل سرير أحمر له طبيب وممرضتان: واحدة للأدوية والخطوط وواحدة للتوثيق.</li><li>استشاري الطوارئ يقود المنطقة، وطبيبا تخدير متنقلان لمجرى الهواء.</li><li>عند امتلاء R1–R4 تُفتح R5 وR6.</li></ul>', en: 'START: breathing over 30 = Red (so is an absent radial pulse, capillary refill over 2 s, or not following commands):<ul><li>Each red bed has a physician and two nurses: one for drugs and lines, one for charting.</li><li>The EM consultant leads the zone, with two floating anaesthetists for airways.</li><li>When R1–R4 fill, surge beds R5 and R6 open.</li></ul>' } },
+      { x: { ar: 'أرسلها للأشعة المقطعية أولاً لمعرفة سبب الكدمة.', en: 'Send her to CT first to find the cause of the bruise.' }, pen: 5,
+        fb: { ar: 'مريضة غير مستقرة لا تذهب للأشعة من الفرز. تذهب للإنعاش، وهناك يقرر فريقها التصوير.', en: 'An unstable patient does not go from triage to the scanner. She goes to resus, where her team decides on imaging.' } },
+      { x: { ar: 'تبقى عند الفرز حتى يُفرز الجميع، ثم نوزع الأسرّة.', en: 'She stays at triage until everyone is tagged, then beds are allocated.' }, pen: 5,
+        fb: { ar: 'الأحمر يذهب لمنطقته فور فرزه. الفرز قرار ثوانٍ لكل مصاب، والانتظار عند الباب قد يكلّفها حياتها.', en: 'Red goes to its zone as soon as it is tagged. Triage takes seconds per casualty, and waiting at the door could cost her life.' } },
+    ] },
+  { t: 21, on: ['tri', 'yel'], b: [14, 1, 0, 1, 1], banner: 'active',
+    title: { ar: 'طفلة مصابة', en: 'An injured child' },
+    story: { ar: 'طفلة عمرها 10 سنوات، لا تستطيع المشي بسبب ألم وتشوه في الساق. التنفس 24، النبض الكعبري موجود، وتتبع الأوامر. أمها مصابة إصابة بسيطة وتمشي معها.', en: 'A 10-year-old girl who cannot walk because of a painful, deformed leg. Breathing 24, radial pulse present, follows commands. Her mother has a minor injury and walks beside her.' },
+    q: { ar: 'ما لونها وإلى أين؟', en: 'What tag, and where does she go?' },
+    opts: [
+      { x: { ar: 'أحمر، لأنها طفلة.', en: 'Red, because she is a child.' }, pen: 4,
+        fb: { ar: 'العمر وحده لا يغيّر اللون. معاييرها كلها صفراء، والطفل الأحمر فقط يذهب للإنعاش.', en: 'Age alone does not change the tag. All her signs are Yellow; only red children go to resus.' } },
+      { x: { ar: 'أصفر، مع أمها في طوارئ النساء.', en: 'Yellow, with her mother in the women’s ER.' }, pen: 3,
+        fb: { ar: 'الخطة تخصص طوارئ الأطفال للأطفال الصفر مع أخصائي أطفال. والأم ماشية فهي خضراء، وتُبلَّغ بمكان ابنتها.', en: 'The plan gives yellow children the paediatric ER with a paediatric specialist. Her mother walks, so she is Green and is told where her daughter is.' } },
+      { x: { ar: 'أصفر، إلى طوارئ الأطفال بسرير وممرضة لها، وأخصائي الأطفال يتابعها. الأم أخضر، وتُعطى بطاقتين مربوطتين حتى لا تضيع الطفلة.', en: 'Yellow, to the paediatric ER with her own bed and nurse, under the paediatric specialist. Her mother is Green, and the two cards are linked so the child is never lost.' }, ok: 1, b: [12, 1, 1, 2, 1],
+        log: { ar: 'MCI-004 أصفر ← طوارئ الأطفال P1 · MCI-005 (الأم) أخضر', en: 'MCI-004 Yellow → paediatric ER P1 · MCI-005 (mother) Green' },
+        fb: { ar: 'START: لا تمشي، تنفس أقل من 30، نبض موجود، وتتبع الأوامر = أصفر:<ul><li>الأطفال الصفر في طوارئ الأطفال (3 أسرّة) مع أخصائي أطفال.</li><li>طوارئ النساء والأطفال لهما باب واحد: انتبه للزحام عنده.</li><li>ممرضة لكل مريض أصفر لاكتشاف التدهور مبكراً.</li></ul>', en: 'START: cannot walk, breathing under 30, pulse present, follows commands = Yellow:<ul><li>Yellow children go to the paediatric ER (3 beds) with a paediatric specialist.</li><li>The women’s and paediatric ERs share one door: watch for a bottleneck there.</li><li>One nurse per yellow patient catches deterioration early.</li></ul>' } },
+      { x: { ar: 'أخضر، لأنها تتنفس طبيعياً.', en: 'Green, because she is breathing normally.' }, pen: 5,
+        fb: { ar: 'الأخضر لمن يمشي فقط. هي لا تستطيع المشي، فلا تكون خضراء.', en: 'Green is only for those who walk. She cannot walk, so she cannot be Green.' } },
+    ] },
+  { t: 24, on: ['cmd', 'tri'], b: [12, 1, 1, 2, 1], banner: 'active',
+    title: { ar: 'من هذا المصاب؟', en: 'Who is this casualty?' },
+    story: { ar: 'الإصابات تتوالى. كثير منهم بلا هوية، وبعضهم لا يستطيع ذكر اسمه. المختبر يسأل: باسم من نسجل عينات الدم؟', en: 'Casualties keep coming. Many have no ID and some cannot give their name. The lab asks whose name the blood samples should go under.' },
+    q: { ar: 'كيف تتبعون المصابين؟', en: 'How do you track the casualties?' },
+    opts: [
+      { x: { ar: 'نوقف كل مصاب حتى يُسجَّل باسمه ورقم هويته في النظام.', en: 'Stop each casualty until they are registered by name and ID number.' }, pen: 5,
+        fb: { ar: 'التسجيل الكامل يأخذ دقائق لكل مصاب، والعلاج لا ينتظر الهوية.', en: 'Full registration takes minutes per casualty, and treatment does not wait for an ID.' } },
+      { x: { ar: 'مريض واحد، بطاقة واحدة: بطاقة فرز باللون ورقم ملف مؤقت (MCI-001…) على المعصم، وكل عينة وطلب بهذا الرقم. ضابط التتبع يسجل كل انتقال على اللوحة، والتسجيل الكامل لاحقاً.', en: 'One patient, one card: a coloured triage card and a temporary file number (MCI-001…) on the wrist, with every sample and order under that number. The Tracking Officer logs every move on the board; full registration comes later.' }, ok: 1,
+        log: { ar: 'نظام التتبع: بطاقة + رقم ملف مؤقت لكل مصاب', en: 'Tracking: card + temporary file number per casualty' },
+        fb: { ar: 'التتبع يمنع ضياع المصابين وخلط العينات:<ul><li>الرقم المؤقت يُعطى عند الفرز ويُستخدم في المختبر والأشعة وبنك الدم.</li><li>كل انتقال بين المناطق يُسجَّل على اللوحة.</li><li>الأهل يُوجَّهون للأخصائي الاجتماعي الذي يطابق الأسماء بالأرقام.</li></ul>', en: 'Tracking stops casualties being lost and samples being mixed up:<ul><li>The temporary number is given at triage and used by the lab, radiology and blood bank.</li><li>Every move between zones goes on the board.</li><li>Families go to the social worker, who matches names to numbers.</li></ul>' } },
+      { x: { ar: 'نكتب الأسماء على السبورة فقط، ونسأل عن الباقي لاحقاً.', en: 'Write names on the whiteboard only and ask about the rest later.' }, pen: 4,
+        fb: { ar: 'المصاب بلا اسم لا يظهر على السبورة، والأسماء المتشابهة تختلط. التتبع يكون برقم مؤقت على المصاب نفسه.', en: 'A casualty with no name never makes the board, and similar names get mixed up. Tracking uses a temporary number on the casualty.' } },
+      { x: { ar: 'نؤجل التوثيق كله حتى نهاية الكود.', en: 'Leave all documentation until the code is over.' }, pen: 5,
+        fb: { ar: 'بدون تتبع أثناء الحدث لن تعرف أين كل مصاب ولا ماذا أُعطي، ولن تستطيع الرد على الأهل.', en: 'Without live tracking you lose where each casualty is and what they were given, and you cannot answer families.' } },
+    ] },
+  { t: 35, on: ['red', 'pool'], b: [5, 4, 6, 5, 1], banner: 'active',
+    title: { ar: 'زحام في الإنعاش', en: 'Crowding in resus' },
+    story: { ar: 'الإنعاش فيه 4 مصابين حمر والخامس في الطريق. دخل أخصائي جراحة وأخصائي عظام ومقيمان من الباطنة بدون استدعاء، ووقفوا حول الأسرّة يعطون آراءهم.', en: 'Resus has 4 red casualties and a fifth is on the way. A surgical specialist, an orthopaedic specialist and two medical residents walk in uncalled and stand around the beds giving opinions.' },
+    q: { ar: 'ماذا تفعل؟', en: 'What do you do?' },
+    opts: [
+      { x: { ar: 'اتركهم، فكل يد إضافية تساعد.', en: 'Let them stay; every extra hand helps.' }, pen: 5,
+        fb: { ar: 'الزحام يبطئ كل شيء: يسد الوصول للمريض، تتكرر المهام، وتضيع الأوامر في الضجيج.', en: 'Crowding slows everything: blocked access, duplicated tasks, orders lost in the noise.' } },
+      { x: { ar: 'رئيس العمليات يوزعهم حسب الحاجة: أخصائي الجراحة إلى السرير R5 والعظام إلى R6 عند فتحهما، والمقيمان يعودان إلى تجمّع الطاقم. لا أحد يبقى في المنطقة بدون دور.', en: 'The Ops Chief places them by need: the surgical specialist to R5 and the orthopaedic specialist to R6 as they open, and the two residents go back to the staff pool. Nobody stays in the zone without a role.' }, ok: 1,
+        log: { ar: 'فتح R5 (جراحة) وR6 (عظام)، المقيمان إلى تجمّع الطاقم', en: 'R5 (surgery) and R6 (orthopaedics) opened, residents back to the pool' },
+        fb: { ar: 'الاستدعاء حسب الحاجة يحمي المنطقة:<ul><li>الأقدمية للأشد خطورة: التخصص يُوجَّه للحالة التي تحتاجه.</li><li>R5 وR6 أسرّة إضافية بأخصائي جراحة وأخصائي عظام حسب الخطة.</li><li>من لا دور له يعود إلى تجمّع الطاقم وينتظر الاستدعاء.</li></ul>', en: 'Calling by need protects the zone:<ul><li>Seniority to the sickest: each specialty goes to the case that needs it.</li><li>R5 and R6 are surge beds with a surgical and an orthopaedic specialist, as planned.</li><li>Anyone without a role returns to the staff pool and waits to be called.</li></ul>' } },
+      { x: { ar: 'اطلب من الجميع الخروج، بما فيهم الأخصائيون.', en: 'Order everyone out, specialists included.' }, pen: 3,
+        fb: { ar: 'إخراج الجميع يضيّع أخصائيين تحتاجهم الحالات الآن. المطلوب توزيع، وليس طرداً.', en: 'Sending everyone away wastes specialists the patients need right now. The answer is placement, not eviction.' } },
+      { x: { ar: 'تجاهلهم وركّز على مرضاك.', en: 'Ignore them and focus on your patients.' }, pen: 4,
+        fb: { ar: 'الزحام لا ينظم نفسه. إدارة المنطقة جزء من قيادتها.', en: 'A crowd does not organise itself. Managing the zone is part of leading it.' } },
+    ] },
+  { t: 50, on: ['yel', 'red'], b: [0, 6, 9, 9, 1], banner: 'active',
+    title: { ar: 'إعادة الفرز', en: 'Re-triage' },
+    story: { ar: 'في جولة إعادة الفرز كل 30 دقيقة، ممرضة المريض M3 في طوارئ الرجال تنبهك: كان أصفر بكسر في الحوض، والآن الضغط 82/50، النبض 128، والتنفس 32.', en: 'On the 30-minute re-triage round, the nurse for M3 in the men’s ER flags him: tagged Yellow with a pelvic fracture, his BP is now 82/50, pulse 128 and breathing 32.' },
+    q: { ar: 'ما قرارك؟', en: 'What is your call?' },
+    opts: [
+      { x: { ar: 'سوائل وريدية، ونعيد تقييمه في الجولة القادمة بعد 30 دقيقة.', en: 'IV fluids, and reassess him on the next round in 30 minutes.' }, pen: 6,
+        fb: { ar: 'هذا صدمة نزفية. 30 دقيقة أخرى في الأصفر قد تكون قاتلة. إعادة الفرز هدفها الترقية الفورية عند التدهور.', en: 'This is haemorrhagic shock. Another 30 minutes in Yellow could kill him. Re-triage exists to upgrade at once when someone deteriorates.' } },
+      { x: { ar: 'ترقية فورية إلى أحمر: أبلغ قائد المنطقة ورئيس العمليات، وينتقل إلى الإنعاش عبر الممر الأوسط. حدّث بطاقته ولوحة التتبع.', en: 'Upgrade to Red now: tell the zone lead and the Ops Chief, and move him to resus through the central lane. Update his card and the tracking board.' }, ok: 1, b: [0, 7, 8, 9, 1],
+        log: { ar: 'MCI-011 ترقية أصفر ← أحمر، نُقل للإنعاش', en: 'MCI-011 upgraded Yellow → Red, moved to resus' },
+        fb: { ar: 'الفرز ليس قراراً واحداً:<ul><li>الأصفر والأخضر يُعاد فرزهم كل 30 دقيقة، وأي تدهور يُرقّى للأحمر فوراً.</li><li>ممرضة لكل مريض أصفر هي ما يكشف التدهور مبكراً.</li><li>إذا كانت أسرّة الإنعاش ممتلئة، رئيس العمليات يقرر النقل للعمليات أو العناية.</li></ul>', en: 'Triage is not a one-off decision:<ul><li>Yellow and Green are re-triaged every 30 minutes, and any deterioration is upgraded to Red at once.</li><li>One nurse per yellow patient is what spots it early.</li><li>If resus is full, the Ops Chief decides on theatre or ICU.</li></ul>' } },
+      { x: { ar: 'خذه للعمليات مباشرة بنفسك بدون إبلاغ أحد، فالوقت ضيق.', en: 'Take him to theatre yourself without telling anyone; time is short.' }, pen: 4,
+        fb: { ar: 'قد يحتاج العمليات فعلاً، لكن نقله بدون علم القيادة يربك التتبع وقد تكون غرفة العمليات مشغولة. الإبلاغ يأخذ ثواني.', en: 'He may well need theatre, but moving him without command breaks tracking, and theatre may be taken. Telling them takes seconds.' } },
+      { x: { ar: 'اطلب أشعة مقطعية للحوض قبل أي قرار.', en: 'Order a CT of the pelvis before deciding anything.' }, pen: 5,
+        fb: { ar: 'مريض في صدمة لا يذهب للأشعة المقطعية. يُرقّى ويُنعَش أولاً.', en: 'A patient in shock does not go to CT. Upgrade and resuscitate first.' } },
+    ] },
+  { t: 180, on: ['cmd'], b: [0, 0, 2, 0, 1], banner: 'active',
+    title: { ar: 'إنهاء الكود', en: 'Standing down' },
+    story: { ar: 'بعد ثلاث ساعات: كل الإصابات فُرزت وعولجت. الحمر نُقلوا للعمليات والعناية، والخضر خرجوا، وبقي مصابان صفر بانتظار التنويم. الهلال الأحمر يؤكد: لا إصابات أخرى.', en: 'Three hours on: every casualty has been triaged and treated. Red went to theatre and ICU, Green went home, and two yellow casualties await admission. The Red Crescent confirms no more casualties.' },
+    q: { ar: 'كيف ينتهي الكود؟', en: 'How does the code end?' },
+    opts: [
+      { x: { ar: 'نعلن نحن في الطوارئ إنهاء الكود، ونرجع للعمل الطبيعي.', en: 'The ED declares the code over and returns to normal.' }, pen: 4,
+        fb: { ar: 'الكود تفعّله القيادة وتنهيه القيادة. المستشفى كلها مفعّلة، وليس الطوارئ فقط.', en: 'Command activates the code and command ends it. The whole hospital is activated, not just the ED.' } },
+      { x: { ar: 'قائد الحادث يعلن الإنهاء عبر السنترال. الطوارئ تعود تدريجياً للوضع الطبيعي: تُعاد تعبئة المستلزمات، يُستكمل التوثيق والتسجيل، وجلسة نقاش سريعة مع الفريق، ثم تقرير بعد الحدث.', en: 'The Incident Commander stands down the code through the switchboard. The ED returns to normal in steps: restock, complete documentation and registration, a quick hot debrief with the team, then an after-action report.' }, ok: 1, b: [0, 0, 2, 0, 1], banner: 'stood',
+        log: { ar: 'إنهاء الكود الأصفر من قائد الحادث، نقاش الفريق', en: 'Code Yellow stood down by the Incident Commander, team debrief' },
+        fb: { ar: 'الإنهاء جزء من الخطة:<ul><li>يعلنه قائد الحادث عندما تُفرز كل الإصابات ولا يُتوقع المزيد.</li><li>إعادة التعبئة والتوثيق قبل أن يعود القسم لاستقبال المرضى العاديين.</li><li>النقاش بعد الحدث يحوّل الأخطاء إلى تحسينات للخطة.</li></ul>', en: 'Standing down is part of the plan:<ul><li>The Incident Commander declares it once every casualty is triaged and no more are expected.</li><li>Restocking and documentation come before the ED takes normal patients again.</li><li>The debrief turns mistakes into improvements to the plan.</li></ul>' } },
+      { x: { ar: 'الطاقم الداعم يغادر فوراً، والباقون ينهون العمل.', en: 'Support staff leave immediately and the rest finish up.' }, pen: 3,
+        fb: { ar: 'الطاقم يعود لأقسامه بقرار من القيادة وبعد التسليم، حتى لا يبقى مريض بلا ممرضة.', en: 'Staff go back to their units when command releases them, after handover, so no patient is left without a nurse.' } },
+      { x: { ar: 'لا داعي للنقاش بعد الحدث، الكل متعب.', en: 'Skip the debrief; everyone is tired.' }, pen: 3,
+        fb: { ar: 'نقاش قصير بعد الحدث مباشرة يلتقط ما لن يتذكره أحد بعد أسبوع، ويدعم الفريق نفسياً.', en: 'A short debrief right away captures what nobody will remember a week later, and supports the team.' } },
+    ] },
+];
+
+const PREP = SCENES.filter((s) => s.prep).length;
+const $ = (id) => document.getElementById(id);
+const S = { i: -1, pen: 0, tries: 0, tried: [], res: [], view: 'intro', k: -1, b: [0, 0, 0, 0, 0], banner: 'idle', clock: null, log: [] };
+const control = () => Math.max(0, 100 - S.pen * 2);
+const stamp = (kind) => '<svg class="stamp ' + kind + '" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29"></circle><path d="' + (kind === 'ok' ? 'M19 33l9 9 17-19' : 'M22 22l20 20M42 22L22 42') + '"></path></svg>';
+const clockTxt = (m) => (m === null ? '--' : Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'));
+
+/* Board */
+function setBoard(b, banner) {
+  const ids = ['zIn', 'zR', 'zY', 'zG', 'zK'];
+  ids.forEach((id, k) => {
+    const el = $(id);
+    if (el.textContent !== String(b[k])) { el.textContent = b[k]; el.parentNode.classList.remove('bump'); void el.offsetWidth; el.parentNode.classList.add('bump'); }
+  });
+  S.b = b;
+  if (banner) S.banner = banner;
+  $('banner').className = 'banner' + (S.banner === 'idle' ? ' idle' : '');
+  $('bannerTxt').textContent = L(UI[S.banner]);
+}
+function setClock(m) {
+  S.clock = m;
+  $('clock').textContent = clockTxt(m === null ? null : m + S.pen);
+  const c = control(), el = $('ctl');
+  el.textContent = c + '%'; el.className = c >= 80 ? 'g' : c >= 60 ? 'a' : 'r';
+}
+function addLog(entry) { S.log.push(entry); drawLog(); }
+function drawLog() {
+  $('log').innerHTML = S.log.length
+    ? S.log.map((e) => '<li><time>T+' + clockTxt(e.m) + '</time><span>' + L(e.x) + '</span></li>').join('')
+    : '<li class="empty">' + L(UI.logEmpty) + '</li>';
+}
+
+/* Map: schematic of the ED during the code */
+function drawMap(on) {
+  const A = (key, cls, x, y, w, h) => {
+    const a = AREAS[key], cx = x + w / 2, cy = y + h / 2;
+    return '<g class="area ' + cls + (on.includes(cls) || on.includes(key) ? ' on' : '') + '"><rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="8"></rect>' +
+      '<text x="' + cx + '" y="' + (cy - 3) + '">' + L(a) + '</text><text class="n" x="' + cx + '" y="' + (cy + 12) + '">' + L(a.sub) + '</text></g>';
+  };
+  $('map').innerHTML =
+    A('grn', 'grn', 6, 40, 92, 196) +
+    A('red', 'red', 104, 120, 96, 116) +
+    A('cmd', 'cmd', 206, 40, 84, 72) +
+    A('pool', 'pool', 206, 120, 84, 116) +
+    A('yelW', 'yel', 296, 40, 98, 92) +
+    A('yelM', 'yel', 296, 140, 98, 96) +
+    '<rect x="104" y="40" width="96" height="72" rx="8" fill="none" stroke="var(--line)" stroke-dasharray="4 4"></rect>' +
+    '<text class="gate" x="152" y="80">' + L({ ar: 'غرفة التخطيط', en: 'ECG room' }) + '</text>' +
+    '<path class="lane" d="M248 300 L248 128"></path>' +
+    '<text class="gate" x="52" y="252">' + L({ ar: '▲ بوابة مستقلة', en: '▲ own gate' }) + '</text>' +
+    '<text class="gate" x="248" y="252">' + L({ ar: '▲ مدخل الطوارئ', en: '▲ ED entrance' }) + '</text>' +
+    A('tri', 'tri', 104, 262, 186, 62) +
+    '<rect class="bay" x="112" y="268" width="12" height="12" rx="3" fill="var(--red)"></rect><rect class="bay" x="128" y="268" width="12" height="12" rx="3" fill="var(--yellow)"></rect><rect class="bay" x="144" y="268" width="12" height="12" rx="3" fill="var(--green)"></rect><rect class="bay" x="160" y="268" width="12" height="12" rx="3" fill="var(--black)"></rect>' +
+    A('blk', 'blk', 296, 262, 98, 62);
+  $('map').setAttribute('aria-label', L({ ar: 'خريطة توضيحية لمناطق الطوارئ أثناء الكود الأصفر', en: 'Schematic map of the ED zones during Code Yellow' }));
+}
+function drawRules() {
+  $('rules').innerHTML = RULES.map((r) => '<li><i style="background:' + r[0] + '"></i><div><b>' + L(r[1]) + '</b> <span>' + L(r[2]) + '</span></div></li>').join('');
+}
+
+/* Screens */
+const card = $('card');
+function stepsHtml() {
+  return '<div class="steps" aria-hidden="true">' + SCENES.map((_, k) => {
+    const r = S.res[k];
+    return '<i class="' + (r === undefined ? (k === S.i ? 'now' : '') : (r === 0 ? 'done' : 'miss')) + '"></i>';
+  }).join('') + '</div>';
+}
+function intro() {
+  S.view = 'intro';
+  drawMap([]);
+  card.className = 'card panel';
+  card.innerHTML =
+    '<span class="eyebrow">' + L({ ar: 'حالة تدريبية للأطباء والتمريض · خطة الكود الأصفر للإصابات الجماعية', en: 'Training case for physicians and nurses · Code Yellow mass casualty plan' }) + '</span>' +
+    '<h1>' + L({ ar: 'الكود الأصفر: حادث حافلة', en: 'Code Yellow: a bus crash' }) + '</h1>' +
+    '<p class="story">' + L({ ar: 'بلاغ بحادث فيه 18 مصاباً في طريقهم إلى قسمك. أنت الطبيب المسؤول عن المناوبة، ثم رئيس العمليات الطبية بعد التفعيل.', en: 'An incident with 18 casualties on their way to your department. You are the physician in charge of the shift, then the Medical Operations Chief once the code is active.' }) + '</p>' +
+    '<p class="story">' + L({ ar: 'أمامك ' + SCENES.length + ' قراراً: أربعة قبل وصول الإصابات، والباقي أثناء الحدث. الهدف قسم منظم بلا زحام: كل مصاب في منطقته، وكل فرد من الطاقم في دوره. كل قرار خاطئ يضيف دقائق ضائعة ويُنقص السيطرة على الحدث. أقل من 60% يعني أن الحدث خرج عن السيطرة.', en: 'You have ' + SCENES.length + ' decisions: four before the casualties arrive, the rest during the incident. The goal is an organised department with no crowding: every casualty in their zone and every staff member in their role. Each wrong call adds lost minutes and lowers your control of the incident. Below 60% the incident is out of control.' }) + '</p>' +
+    '<button class="go" id="startBtn" type="button">' + L(UI.start) + '</button>';
+  $('startBtn').onclick = () => { S.pen = 0; S.res = []; S.log = []; drawLog(); go(0); };
+}
+function go(i) {
+  S.i = i; S.tries = 0; S.tried = [];
+  const sc = SCENES[i];
+  setBoard(sc.b, sc.banner); setClock(sc.t); drawMap(sc.on);
+  ask(i);
+}
+function ask(i) {
+  S.view = 'ask';
+  const sc = SCENES[i];
+  card.className = 'card panel';
+  card.innerHTML = stepsHtml() +
+    '<span class="eyebrow">' + (sc.prep ? L(UI.before) : '') + L(UI.decision) + ' ' + (i + 1) + ' ' + L(UI.of) + ' ' + SCENES.length + '</span>' +
+    '<h1>' + L(sc.title) + '</h1><p class="story">' + L(sc.story) + '</p><p class="q">' + L(sc.q) + '</p>' +
+    '<div class="opts">' + sc.opts.map((o, k) => {
+      const used = S.tried.includes(k);
+      return '<button class="opt' + (used ? ' wrong' : '') + '" type="button" id="opt-' + k + '"' + (used ? ' disabled' : '') + '>' + L(o.x) + '</button>';
+    }).join('') + '</div>';
+  sc.opts.forEach((o, k) => { $('opt-' + k).onclick = () => pick(i, k); });
+}
+/* Every choice gets its own verdict screen: what it cost, then why. */
+function pick(i, k, redraw) {
+  S.view = 'pick'; S.k = k;
+  const sc = SCENES[i], o = sc.opts[k], last = i === SCENES.length - 1;
+  const head = (kind, title) => stepsHtml() +
+    '<div class="verdict">' + stamp(kind) + '<div><span class="eyebrow">' + L(UI.decision) + ' ' + (i + 1) + ' ' + L(UI.of) + ' ' + SCENES.length + ' · ' + L(sc.title) + '</span><h1>' + title + '</h1></div></div>' +
+    '<p class="chose">' + L(UI.yourCall) + L(o.x) + '</p>';
+  if (!o.ok) {
+    if (!redraw) { S.tries++; S.tried.push(k); S.pen += o.pen; setClock(sc.t); }
+    card.className = 'card panel' + (redraw ? '' : ' is-no');
+    card.innerHTML = head('no', L(UI.wrong)) +
+      '<div class="score"><div><b>+' + o.pen + '</b><span>' + L(UI.lost) + '</span></div>' +
+      '<div><b>' + control() + '%</b><span>' + L(UI.ctlLeft) + '</span></div></div>' +
+      '<div class="fb no"><strong>' + L(UI.whyNo) + '</strong>' + L(o.fb) + '</div>' +
+      '<button class="go" id="retryBtn" type="button">' + L(UI.back) + '</button>';
+    $('retryBtn').onclick = () => ask(i);
+    return;
+  }
+  if (!redraw) {
+    S.res[i] = S.tries;
+    addLog({ m: sc.t + S.pen, x: o.log });
+    if (o.b) setBoard(o.b, o.banner); else if (o.banner) setBoard(S.b, o.banner);
+  }
+  card.className = 'card panel is-ok';
+  card.innerHTML = head('ok', L(S.res[i] ? UI.right : UI.rightFirst)) +
+    '<div class="score"><div><b>T+' + clockTxt(sc.t + S.pen) + '</b><span>' + L(UI.logged) + '</span></div>' +
+    '<div><b>' + control() + '%</b><span>' + L(UI.ctlLeft) + '</span></div></div>' +
+    '<div class="fb ok"><strong>' + L(UI.whyOk) + '</strong>' + L(o.fb) + '</div>' +
+    '<button class="go" id="nextBtn" type="button">' + L(last ? UI.debrief : UI.next) + '</button>';
+  $('nextBtn').onclick = () => (last ? finish() : go(i + 1));
+}
+function finish() {
+  S.view = 'finish';
+  const first = S.res.filter((r) => r === 0).length, pass = control() >= 60;
+  card.className = 'card panel ' + (pass ? 'is-ok' : 'is-no');
+  card.innerHTML = stepsHtml() +
+    '<div class="verdict">' + stamp(pass ? 'ok' : 'no') + '<div><span class="eyebrow">' + L({ ar: 'التقييم بعد الحدث', en: 'After-action debrief' }) + '</span><h1>' +
+      L(pass ? { ar: 'الحدث تحت السيطرة', en: 'Incident under control' } : { ar: 'الحدث خرج عن السيطرة', en: 'Incident out of control' }) + '</h1></div></div>' +
+    '<p class="story">' + L(pass
+      ? (first === SCENES.length ? { ar: 'إدارة نموذجية. ', en: 'A textbook response. ' } : { ar: 'قيادة جيدة، مع نقاط للمراجعة بالأسفل. ', en: 'Good leadership, with points to review below. ' })
+      : { ar: 'ضاع وقت كثير في قرارات خاطئة: زحام وتأخير في الفرز، ومصابون انتظروا أسرّة كان يمكن تجهيزها. راجع النقاط بالأسفل وأعد الحالة.', en: 'Too much time went to wrong calls: crowding, delayed triage, and casualties waiting for beds that could have been ready. Review the points below and run it again.' }) +
+      (pass ? L({ ar: 'كل مصاب وصل لمنطقته، والقسم بقي منظماً حتى الإنهاء.', en: 'Every casualty reached their zone, and the department stayed organised until stand-down.' }) : '') + '</p>' +
+    '<div class="score">' +
+      '<div><b>' + control() + '%</b><span>' + L({ ar: 'السيطرة على الحدث (60% أو أكثر للنجاح)', en: 'control of the incident (60% or more to pass)' }) + '</span></div>' +
+      '<div><b>' + first + '/' + SCENES.length + '</b><span>' + L({ ar: 'قرارات صحيحة من أول مرة', en: 'decisions right on the first call' }) + '</span></div>' +
+      '<div><b>+' + S.pen + '</b><span>' + L({ ar: 'دقيقة ضاعت في قرارات خاطئة', en: 'minutes lost to wrong calls' }) + '</span></div>' +
+    '</div>' +
+    '<ul class="review">' + SCENES.map((sc, k) => '<li><span>' + (k + 1) + '. ' + L(sc.title) + '</span><span class="' + (S.res[k] ? 'n' : 'y') + '">' + (S.res[k] ? UI.wrongN[LANG](S.res[k]) : L(UI.firstCall)) + '</span></li>').join('') + '</ul>' +
+    '<button class="go" id="againBtn" type="button">' + L(UI.again) + '</button>' +
+    '<p class="note">' + L({ ar: 'مبنية على خطة الكود الأصفر للقسم (فرز START، فرق الإنعاش، قيادة HICS). للتدريب فقط.', en: 'Based on the department’s Code Yellow plan (START triage, resus teams, HICS command). For training only.' }) + '</p>';
+  $('againBtn').onclick = () => { S.i = -1; S.pen = 0; S.res = []; S.log = []; drawLog(); setBoard([0, 0, 0, 0, 0], 'idle'); setClock(null); intro(); };
+}
+
+/* Language: flips direction and redraws whatever is on screen without losing progress */
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = LANG === 'ar' ? 'rtl' : 'ltr';
+  document.title = LANG === 'ar' ? 'محاكاة الكود الأصفر' : 'Code Yellow Simulation';
+  $('langBtn').textContent = LANG === 'ar' ? 'English' : 'العربية';
+  document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = L(UI[el.dataset.t]); });
+  setBoard(S.b); setClock(S.clock); drawLog(); drawRules();
+  if (S.view === 'intro') intro();
+  else if (S.view === 'ask') { drawMap(SCENES[S.i].on); ask(S.i); }
+  else if (S.view === 'pick') { drawMap(SCENES[S.i].on); pick(S.i, S.k, true); }
+  else { drawMap([]); finish(); }
+}
+$('langBtn').onclick = () => {
+  LANG = LANG === 'ar' ? 'en' : 'ar';
+  try { localStorage.setItem('cy-lang', LANG); } catch (e) {}
+  applyLang();
+};
+applyLang();
+</script>
