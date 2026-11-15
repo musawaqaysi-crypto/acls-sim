@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>STEMI Pathway Game</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Great+Vibes&display=swap">
+<style>
+/* Layout: monitor with the pathway clock and ECG on one side, the decision card and the RCC timeline on the other; the pathway flow sits under the monitor. One column on a phone, card straight after the monitor. */
+:root {
+  color-scheme: dark;
+  --bg: #0c0e14;
+  --panel: #141822;
+  --screen: #07090d;
+  --line: #262c3a;
+  --fg: #e8eaf0;
+  --muted: #8e96a8;
+  --ecg: #45e08a;
+  --accent: #ff5468;
+  --teal: #2ec4b6;
+  --sky: #5bb8f5;
+  --gold: #f2c230;
+  --ok: #45e08a;
+  --bad: #ff5468;
+  --font-display: "Bricolage Grotesque", "IBM Plex Sans Arabic", "IBM Plex Sans", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "IBM Plex Sans Arabic", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+:root[lang="ar"] { --font-display: "IBM Plex Sans Arabic", "Geeza Pro", Arial, sans-serif; --font-body: "IBM Plex Sans Arabic", "Geeza Pro", Arial, sans-serif; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.65; }
+.app {
+  max-width: 1160px; margin: 0 auto; padding-block: 16px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
+}
+.app > * { min-width: 0; }
+@media (min-width: 920px) {
+  .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "mon card" "flow card" "flow log"; grid-template-rows: auto auto 1fr; align-items: start; }
+  .mon { grid-area: mon; } .card { grid-area: card; } .flow { grid-area: flow; } .sheet { grid-area: log; }
+}
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+h2 { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: 0.02em; margin: 0; }
+.ltr { direction: ltr; unicode-bidi: isolate; }
+
+/* Monitor */
+.mon { background: var(--screen); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.m-top { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.m-top b { color: var(--fg); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; margin-inline-start: 6px; direction: ltr; unicode-bidi: isolate; }
+#myo.g { color: var(--ok); } #myo.a { color: var(--gold); } #myo.r { color: var(--bad); }
+.lang { font: 600 13px var(--font-body); color: var(--screen); background: var(--accent); border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+.lang:hover { filter: brightness(1.1); }
+.pt { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-family: var(--font-display); font-weight: 600; font-size: 16px; }
+.pt i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; animation: beat 0.8s infinite; }
+@keyframes beat { 0%, 100% { transform: scale(0.6); opacity: 0.5; } 30% { transform: scale(1.25); opacity: 1; } }
+.pt.idle i { background: var(--muted); animation: none; } .pt.idle { color: var(--muted); }
+.vit { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+.v { padding: 6px 10px; border-inline-end: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; }
+.v:last-child { border-inline-end: 0; }
+.v span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v b { font-family: var(--font-data); font-size: 20px; font-weight: 600; line-height: 1.15; direction: ltr; unicode-bidi: isolate; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v.hr b { color: var(--ecg); } .v.bp b { color: var(--fg); } .v.sp b { color: var(--sky); } .v.rh b { color: var(--gold); font-size: 15px; }
+.ecg { padding: 6px 8px 8px; border-bottom: 1px solid var(--line); background-image: linear-gradient(rgba(255,84,104,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(255,84,104,0.10) 1px, transparent 1px); background-size: 12px 12px; }
+.ecg svg { width: 100%; height: auto; display: block; direction: ltr; }
+.ecg path { fill: none; stroke: var(--ecg); stroke-width: 1.6; stroke-linejoin: round; }
+.ecg text { fill: var(--muted); font: 600 11px var(--font-data); }
+.ecg .none { fill: var(--muted); font: 500 13px var(--font-body); }
+.ms { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mi { padding: 8px 10px; border-inline-end: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mi:last-child { border-inline-end: 0; }
+.mi span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi b { font-family: var(--font-data); font-size: 20px; font-weight: 600; line-height: 1.15; color: var(--muted); direction: ltr; unicode-bidi: isolate; text-align: start; }
+.mi small { font-family: var(--font-data); font-size: 11px; color: var(--muted); direction: ltr; unicode-bidi: isolate; text-align: start; }
+.mi.ok b { color: var(--ok); } .mi.late b { color: var(--bad); }
+.mi.bump b { animation: bump 0.5s ease-out; }
+@keyframes bump { 40% { transform: scale(1.3); } }
+@media (max-width: 520px) { .v, .mi { padding: 6px 6px; } .v b, .mi b { font-size: 16px; } .v.rh b { font-size: 12px; } }
+
+/* Pathway flow */
+.flow { padding: 14px 16px 16px; display: grid; gap: 12px; }
+.f-head { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline; }
+.f-head span { font-size: 12px; color: var(--muted); }
+.steps-flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.node { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--screen); transition: border-color 0.3s, background 0.3s; }
+.node .ic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 700 14px var(--font-data); background: var(--line); color: var(--muted); }
+.node b { font-family: var(--font-display); font-weight: 600; display: block; }
+.node span { font-size: 13.5px; color: var(--muted); }
+.node.on { border-color: var(--accent); background: rgba(255,84,104,0.08); }
+.node.on .ic { background: var(--accent); color: var(--screen); }
+.node.done .ic { background: var(--teal); color: var(--screen); }
+.node.lysis { border-style: dashed; }
+.arrow { text-align: center; color: var(--muted); font-size: 12px; line-height: 1; }
+.targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.tg { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.tg b { font-family: var(--font-data); font-size: 18px; color: var(--gold); direction: ltr; unicode-bidi: isolate; display: block; text-align: start; }
+.tg span { font-size: 12.5px; color: var(--muted); }
+
+/* Timeline */
+.sheet { padding: 12px 16px; }
+.sheet h2 { color: var(--muted); margin-bottom: 6px; }
+.sheet ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sheet li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; font-size: 14px; }
+.sheet li.sep { display: block; color: var(--accent); font-weight: 600; font-size: 13px; padding-top: 4px; }
+.sheet time { font-family: var(--font-data); color: var(--gold); font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; text-align: start; }
+.sheet li.empty { display: block; color: var(--muted); }
+
+/* Decision card */
+.card { padding: 20px; display: grid; gap: 14px; }
+.steps { display: flex; gap: 6px; align-items: center; }
+.steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.steps i.done { background: var(--ok); } .steps i.miss { background: var(--bad); } .steps i.now { background: var(--accent); }
+.eyebrow { font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1.25; margin: 0; text-wrap: balance; }
+.story { margin: 0; max-width: 62ch; }
+.q { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 4px 0 0; color: var(--accent); text-wrap: balance; }
+.opts { display: grid; gap: 10px; }
+.opt { font: inherit; color: var(--fg); text-align: start; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; line-height: 1.55; }
+.opt:hover:not(:disabled) { border-color: var(--accent); }
+.opt:focus-visible, .go:focus-visible, .lang:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.opt:disabled { cursor: default; opacity: 0.55; }
+.opt.wrong { border-color: var(--bad); opacity: 0.8; text-decoration: line-through; text-decoration-color: var(--bad); }
+.fb { border-radius: 8px; padding: 12px 14px; font-size: 15px; border: 1px solid var(--line); }
+.fb strong { display: block; font-family: var(--font-display); font-size: 16px; margin-bottom: 2px; }
+.fb.ok strong { color: var(--ok); } .fb.no strong { color: var(--bad); }
+.fb ul { margin: 6px 0 0; padding-inline-start: 20px; }
+.go { font: inherit; font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--screen); background: var(--accent); border: 0; border-radius: 8px; padding: 12px 22px; cursor: pointer; justify-self: start; }
+.go:hover { filter: brightness(1.1); }
+.score { display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.score div { display: flex; flex-direction: column; }
+.score b { font-family: var(--font-data); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; text-align: start; }
+.score span { font-size: 13px; color: var(--muted); max-width: 22ch; }
+.review { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 15px; }
+.review li { display: flex; gap: 10px; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.review .y { color: var(--ok); } .review .n { color: var(--bad); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.card.is-ok { border-color: var(--ok); }
+.card.is-no { border-color: var(--bad); animation: shake 0.35s; }
+@keyframes shake { 20% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 80% { transform: translateX(-3px); } }
+.verdict { display: flex; gap: 14px; align-items: center; }
+.stamp { width: 60px; height: 60px; flex: none; animation: pop 0.35s ease-out; }
+.stamp circle { fill: none; stroke: currentColor; stroke-width: 3; }
+.stamp path { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.stamp.ok { color: var(--ok); } .stamp.no { color: var(--bad); }
+@keyframes pop { 0% { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+.chose { margin: 0; color: var(--muted); font-size: 14px; }
+.is-ok .score b { color: var(--ok); } .is-no .score b { color: var(--bad); }
+.sig { grid-column: 1 / -1; text-align: center; font-size: 13px; color: var(--muted); letter-spacing: 0.04em; padding-top: 8px; direction: ltr; }
+.sig b { font-family: "Great Vibes", "Snell Roundhand", "Apple Chancery", cursive; font-weight: 400; font-size: 30px; letter-spacing: 0; color: var(--fg); margin-left: 6px; vertical-align: middle; }
+@media (prefers-reduced-motion: reduce) { .pt i, .stamp, .card.is-no, .mi.bump b { animation: none; } }
+</style>
+
+<div class="app">
+  <div class="mon" aria-live="polite">
+    <div class="m-top">
+      <span><span data-t="clockL"></span><b id="clock">--</b></span>
+      <span><span data-t="myoL"></span><b id="myo" class="g">100%</b></span>
+      <button class="lang" id="langBtn" type="button">English</button>
+    </div>
+    <div class="pt idle" id="pt"><i></i><span id="ptTxt"></span></div>
+    <div class="vit">
+      <div class="v hr"><span data-t="hrL"></span><b id="vHr">--</b></div>
+      <div class="v bp"><span data-t="bpL"></span><b id="vBp">--/--</b></div>
+      <div class="v sp"><span data-t="spL"></span><b id="vSp">--</b></div>
+      <div class="v rh"><span data-t="rhL"></span><b id="vRh">--</b></div>
+    </div>
+    <div class="ecg"><svg id="ecg" viewBox="0 0 600 150" role="img"></svg></div>
+    <div class="ms">
+      <div class="mi" id="m-ecg"><span data-t="mEcg"></span><b>--</b><small>≤ 10</small></div>
+      <div class="mi" id="m-rcc"><span data-t="mRcc"></span><b>--</b><small>&nbsp;</small></div>
+      <div class="mi" id="m-dec"><span data-t="mDec"></span><b>--</b><small>&nbsp;</small></div>
+      <div class="mi" id="m-out"><span id="mOutL"></span><b>--</b><small>≤ 30</small></div>
+    </div>
+  </div>
+
+  <div class="card panel" id="card"></div>
+
+  <section class="flow panel">
+    <div class="f-head"><h2 data-t="flowH"></h2><span data-t="flowNote"></span></div>
+    <ol class="steps-flow" id="flowList"></ol>
+    <div class="targets" id="targets"></div>
+  </section>
+
+  <section class="sheet panel">
+    <h2 data-t="logH"></h2>
+    <ol id="log"></ol>
+  </section>
+
+  <footer class="sig">Designed by <b>Dr. Musawa</b></footer>
+</div>
+
+<script>
+/* Every string has an Arabic and an English version; L() picks the active one. */
+let LANG = 'ar';
+try { const s = localStorage.getItem('stemi-lang'); if (s === 'en' || s === 'ar') LANG = s; } catch (e) {}
+const L = (o) => (typeof o === 'string' ? o : o[LANG]);
+
+const UI = {
+  clockL: { ar: 'منذ الوصول', en: 'DOOR +' },
+  myoL: { ar: 'عضلة القلب', en: 'MYOCARDIUM' },
+  hrL: { ar: 'النبض', en: 'HR bpm' },
+  bpL: { ar: 'الضغط', en: 'BP mmHg' },
+  spL: { ar: 'الأكسجين %', en: 'SpO2 %' },
+  rhL: { ar: 'النظم', en: 'Rhythm' },
+  mEcg: { ar: 'التخطيط (د)', en: 'Door→ECG (min)' },
+  mRcc: { ar: 'اتصال RCC (د)', en: 'Door→RCC (min)' },
+  mDec: { ar: 'القرار (د)', en: 'Decision (min)' },
+  mOutPci: { ar: 'الخروج (د)', en: 'Door-out (min)' },
+  mOutLysis: { ar: 'الإذابة (د)', en: 'Door→needle (min)' },
+  flowH: { ar: 'مسار STEMI مع RCC', en: 'STEMI pathway with RCC' },
+  flowNote: { ar: 'تجمع جازان الصحي', en: 'Jazan Health Cluster' },
+  logH: { ar: 'الخط الزمني (توثيق RCC)', en: 'Timeline (RCC documentation)' },
+  logEmpty: { ar: 'كل خطوة تُسجَّل هنا بوقتها من لحظة الوصول.', en: 'Every step is logged here, timed from arrival.' },
+  idle: { ar: 'لا يوجد مريض', en: 'No patient yet' },
+  min: { ar: 'د', en: 'min' },
+  decision: { ar: 'القرار', en: 'Decision' },
+  of: { ar: 'من', en: 'of' },
+  yourCall: { ar: 'قرارك: ', en: 'Your call: ' },
+  wrong: { ar: 'قرار خاطئ', en: 'Wrong call' },
+  right: { ar: 'قرار صحيح', en: 'Right call' },
+  rightFirst: { ar: 'قرار صحيح من أول مرة', en: 'Right call, first time' },
+  lost: { ar: 'دقائق ضاعت، وعضلة القلب تموت', en: 'minutes lost while muscle dies' },
+  myoLeft: { ar: 'عضلة القلب المُنقَذة', en: 'myocardium saved' },
+  whyNo: { ar: 'لماذا هذا خطأ', en: 'Why it fails' },
+  whyOk: { ar: 'لماذا هذا صحيح', en: 'Why it works' },
+  back: { ar: 'ارجع للقرار', en: 'Back to the decision' },
+  next: { ar: 'القرار التالي', en: 'Next decision' },
+  debrief: { ar: 'اعرض التقييم', en: 'Show my debrief' },
+  logged: { ar: 'من الوصول، مسجّل', en: 'from arrival, logged' },
+  start: { ar: 'ابدأ اللعبة', en: 'Start the game' },
+  again: { ar: 'العب مرة ثانية', en: 'Play again' },
+  firstCall: { ar: 'من أول مرة', en: 'first call' },
+  wrongN: { ar: (n) => n + (n > 1 ? ' قرارات خاطئة' : ' قرار خاطئ'), en: (n) => n + ' wrong ' + (n > 1 ? 'calls' : 'call') },
+};
+
+const PATIENTS = {
+  1: { ar: 'المريض الأول · رجل 58 سنة · ألم صدر منذ ساعتين', en: 'Patient 1 · man, 58 · chest pain for 2 hours' },
+  2: { ar: 'المريض الثاني · رجل 46 سنة · ألم صدر منذ 90 دقيقة', en: 'Patient 2 · man, 46 · chest pain for 90 minutes' },
+};
+
+const FLOW = [
+  ['ed', 'ED', { ar: 'الطوارئ', en: 'Emergency Department' }, { ar: 'تثبيت الحالة، تخطيط، تحاليل، وإذابة إذا أوصى RCC.', en: 'Stabilise, ECG, labs; thrombolysis if advised by RCC.' }],
+  ['coord', 'RC', { ar: 'منسق RCC', en: 'RCC Coordinator' }, { ar: 'يستقبل الاتصال، يربط الاستشاري المناوب، يبلغ الإسعاف والمركز المستقبِل.', en: 'Takes the call, connects the on-call consultant, informs the ambulance and the receiving center.' }],
+  ['cons', 'Dr', { ar: 'استشاري RCC', en: 'RCC Consultant' }, { ar: 'يحدد STEMI أو لا، وقسطرة أولية أو إذابة.', en: 'Decides STEMI or not, and primary PCI or thrombolysis.' }],
+  ['acc', '✓', { ar: 'القبول', en: 'Accepted' }, { ar: 'النقل عبر مركز النقل، والطوارئ تجهز فريق النقل.', en: 'Transport via the Transportation Center; the ED prepares the transfer team.' }],
+  ['center', 'PCI', { ar: 'المركز المختص', en: 'Specialized Center' }, { ar: 'مباشرة إلى غرفة القسطرة (PPCI).', en: 'Direct to the cath lab (PPCI).' }],
+];
+const TARGETS = [
+  ['≤ 10 min', { ar: 'من الوصول إلى أول تخطيط', en: 'arrival to first 12-lead ECG' }],
+  ['≤ 120 min', { ar: 'من التشخيص إلى القسطرة، وإلا فالإذابة', en: 'diagnosis to PCI, or else thrombolysis' }],
+  ['≤ 30 min', { ar: 'من الدخول إلى الخروج للقسطرة', en: 'door-in-door-out for transfer' }],
+  ['≤ 30 min', { ar: 'من الوصول إلى بدء الإذابة', en: 'door-to-needle for thrombolysis' }],
+];
+
+/* ECG strips: each lead is a few beats with an ST offset (px, up is positive) */
+const ECGS = {
+  inf: [['II', 14], ['III', 16], ['aVF', 15], ['aVL', -7]],
+  ant: [['V1', 10], ['V2', 18], ['V3', 17], ['V4', 13]],
+  rv: [['V4R', 7], ['V1', 4], ['II', 14], ['aVL', -6]],
+  aivr: 'aivr',
+  sinus: [['II', 0], ['V2', 0], ['V3', 0], ['aVL', 0]],
+};
+
+const SCENES = [
+  /* Patient 1: inferior STEMI to primary PCI */
+  { pt: 1, t: 2, node: 'ed', v: ['96', '138/84', '97', { ar: 'جيبي', en: 'Sinus' }], ecg: null,
+    title: { ar: 'عند الفرز', en: 'At triage' },
+    story: { ar: 'رجل 58 سنة، مدخن وعنده سكري، دخل الطوارئ ماشياً. ألم ضاغط في الصدر منذ ساعتين يمتد للفك، مع تعرق. الانتظار مزدحم.', en: 'A 58-year-old man, a smoker with diabetes, walks into the ED. Two hours of pressing chest pain spreading to the jaw, with sweating. The waiting room is busy.' },
+    q: { ar: 'ما أول خطوة؟', en: 'What is the first step?' },
+    opts: [
+      { x: { ar: 'يأخذ رقماً وينتظر دوره، فهو يمشي ومستقر.', en: 'He takes a number and waits his turn; he is walking and stable.' }, pen: 15,
+        fb: { ar: 'ألم الصدر القلبي لا ينتظر في الصالة. المشي لا يعني الاستقرار، وكل دقيقة تأخير تعني عضلة قلب تموت.', en: 'Cardiac chest pain never waits in the waiting room. Walking does not mean stable, and every minute of delay is muscle lost.' } },
+      { x: { ar: 'تخطيط قلب 12 اتجاهاً خلال 10 دقائق من الوصول، ويقرأه الطبيب فوراً.', en: 'A 12-lead ECG within 10 minutes of arrival, read by a physician at once.' }, ok: 1, ms: ['ecg', 7],
+        log: { ar: 'تخطيط 12 اتجاهاً، قرأه الطبيب', en: '12-lead ECG done and read by physician' },
+        fb: { ar: 'الهدف: أول تخطيط خلال 10 دقائق من الوصول لكل ألم صدر مشتبه:<ul><li>الفرز يرفع الحالة فوراً ويأخذها لغرفة التخطيط أو الإنعاش.</li><li>الطبيب يقرأ التخطيط في الحال، ولا يُترك على المكتب.</li><li>إذا كان التخطيط الأول طبيعياً والألم مستمر: يُعاد كل 15–30 دقيقة.</li></ul>', en: 'Target: first ECG within 10 minutes of arrival for any suspected cardiac pain:<ul><li>Triage escalates at once and takes him to the ECG room or resus.</li><li>A physician reads it immediately; it is never left on a desk.</li><li>If the first ECG is normal and pain continues, repeat every 15–30 minutes.</li></ul>' } },
+      { x: { ar: 'نسحب التروبونين أولاً، ونقرر بعد النتيجة.', en: 'Draw a troponin first and decide on the result.' }, pen: 20,
+        fb: { ar: 'تشخيص STEMI يكون بالتخطيط، وليس بالتروبونين. انتظار النتيجة يؤخر القرار ساعة تقريباً.', en: 'STEMI is diagnosed on the ECG, not the troponin. Waiting for the result delays the decision by about an hour.' } },
+      { x: { ar: 'نعطيه مسكناً ونعيد تقييمه بعد نصف ساعة.', en: 'Give analgesia and reassess in half an hour.' }, pen: 20,
+        fb: { ar: 'تسكين الألم بدون تخطيط قد يخفي جلطة. التخطيط أولاً.', en: 'Treating the pain without an ECG can hide an infarct. ECG first.' } },
+    ] },
+  { pt: 1, t: 8, node: 'ed', v: ['92', '134/82', '97', { ar: 'جيبي', en: 'Sinus' }], ecg: 'inf',
+    title: { ar: 'اقرأ التخطيط', en: 'Read the ECG' },
+    story: { ar: 'التخطيط على الشاشة فوق. انظر للاتجاهات II وIII وaVF، وقارنها بـ aVL.', en: 'The ECG is on the monitor above. Look at leads II, III and aVF, and compare them with aVL.' },
+    q: { ar: 'ما التشخيص؟', en: 'What is the diagnosis?' },
+    opts: [
+      { x: { ar: 'التهاب غشاء القلب، لأن الارتفاع في أكثر من اتجاه.', en: 'Pericarditis, because the elevation is in more than one lead.' }, pen: 15,
+        fb: { ar: 'التهاب الغشاء يعطي ارتفاعاً منتشراً بدون انخفاض مقابل (إلا في aVR وV1). هنا الارتفاع محصور في الاتجاهات السفلية مع انخفاض مقابل في aVL.', en: 'Pericarditis gives diffuse elevation without reciprocal depression (except aVR and V1). Here it is confined to the inferior leads, with reciprocal depression in aVL.' } },
+      { x: { ar: 'جلطة سفلية بارتفاع ST (STEMI) في II وIII وaVF، مع انخفاض مقابل في aVL.', en: 'Inferior STEMI: ST elevation in II, III and aVF, with reciprocal depression in aVL.' }, ok: 1,
+        log: { ar: 'تشخيص: STEMI سفلي', en: 'Diagnosis: inferior STEMI' },
+        fb: { ar: 'معايير STEMI: ارتفاع جديد في ST عند نقطة J في اتجاهين متجاورين أو أكثر:<ul><li>1 مم أو أكثر في كل الاتجاهات عدا V2–V3.</li><li>في V2–V3: 2 مم للرجال فوق 40 سنة، و1.5 مم للنساء.</li><li>الانخفاض المقابل يدعم التشخيص ويبعد التهاب الغشاء.</li></ul>', en: 'STEMI criteria: new ST elevation at the J point in two or more contiguous leads:<ul><li>1 mm or more in all leads except V2–V3.</li><li>In V2–V3: 2 mm in men over 40, 1.5 mm in women.</li><li>Reciprocal depression supports the diagnosis and argues against pericarditis.</li></ul>' } },
+      { x: { ar: 'NSTEMI، نسحب تروبونين متكرر.', en: 'NSTEMI; send serial troponins.' }, pen: 20,
+        fb: { ar: 'ارتفاع ST في اتجاهين متجاورين مع انخفاض مقابل = STEMI، ومعالجته كـ NSTEMI تحرمه من فتح الشريان العاجل.', en: 'ST elevation in contiguous leads with reciprocal change is a STEMI. Treating it as NSTEMI denies him urgent reperfusion.' } },
+      { x: { ar: 'تخطيط طبيعي مع إعادة استقطاب مبكرة.', en: 'A normal ECG with early repolarisation.' }, pen: 15,
+        fb: { ar: 'إعادة الاستقطاب المبكرة لا تعطي انخفاضاً مقابلاً، ومع ألم صدر نموذجي يُعامل الارتفاع كجلطة حتى يثبت العكس.', en: 'Early repolarisation has no reciprocal depression, and with typical pain the elevation is an infarct until proven otherwise.' } },
+    ] },
+  { pt: 1, t: 10, node: 'coord', v: ['90', '130/80', '97', { ar: 'جيبي', en: 'Sinus' }], ecg: 'inf',
+    title: { ar: 'بعد التشخيص', en: 'After the diagnosis' },
+    story: { ar: 'STEMI مؤكد في مستشفى ليس فيه قسطرة. الممرضة تسألك: نتصل بمن؟', en: 'A confirmed STEMI in a hospital with no cath lab. The nurse asks who to call.' },
+    q: { ar: 'ماذا تفعل أولاً حسب مسار التجمع؟', en: 'What do you do first, according to the cluster pathway?' },
+    opts: [
+      { x: { ar: 'تتصل بطبيب قلب تعرفه في المركز وتطلب منه يقبل المريض.', en: 'Call a cardiologist you know at the center and ask him to accept the patient.' }, pen: 15,
+        fb: { ar: 'الاتصال الشخصي يتجاوز المسار: لا توثيق، ولا تنسيق إسعاف، ولا ضمان سرير. كل التحويل يمر عبر RCC.', en: 'A personal call bypasses the pathway: no documentation, no ambulance coordination, no guaranteed bed. Every transfer goes through RCC.' } },
+      { x: { ar: 'تتصل بـ RCC، والمنسق يربطك بالاستشاري المناوب. ترسل التخطيط وتعرض الحالة باختصار، وتبدأ العلاج الأولي في نفس الوقت.', en: 'Call RCC; the coordinator connects you to the on-call consultant. Send the ECG, present the case briefly, and start initial treatment at the same time.' }, ok: 1, ms: ['rcc', 12],
+        log: { ar: 'اتصال بـ RCC، المنسق ربط الاستشاري المناوب', en: 'RCC called; coordinator connected the on-call consultant' },
+        fb: { ar: 'هذا دور الطوارئ في سير عمل RCC:<ul><li>تقييم المريض وبدء العلاج الأولي.</li><li>الاتصال بـ RCC، والمنسق يربط الاستشاري ويوثق الوقت.</li><li>تجهيز فريق النقل بينما يُتخذ القرار.</li></ul>', en: 'This is the ED’s role in the RCC workflow:<ul><li>Assess the patient and start initial management.</li><li>Call RCC; the coordinator connects the consultant and logs the times.</li><li>Prepare the transfer team while the decision is made.</li></ul>' } },
+      { x: { ar: 'تبدأ الإذابة فوراً، فالوقت عضلة.', en: 'Start thrombolysis now; time is muscle.' }, pen: 15,
+        fb: { ar: 'في مسارنا، الإذابة في الطوارئ تكون فقط إذا أوصى بها استشاري RCC، لأن القسطرة الأولية قد تكون ممكنة وأفضل.', en: 'In our pathway, thrombolysis in the ED is given only when the RCC consultant advises it, because primary PCI may be possible and better.' } },
+      { x: { ar: 'تحوّله بسيارة أهله إلى المركز، فهو أسرع.', en: 'Send him in the family car to the center; it is faster.' }, pen: 25,
+        fb: { ar: 'مريض STEMI معرض لرجفان بطيني في أي لحظة. النقل بإسعاف مجهز بمراقبة وجهاز صدمات وفريق.', en: 'A STEMI patient can go into VF at any moment. He travels by an equipped ambulance with monitoring, a defibrillator and a team.' } },
+    ] },
+  { pt: 1, t: 13, node: 'ed', v: ['88', '126/78', '96', { ar: 'جيبي', en: 'Sinus' }], ecg: 'inf',
+    title: { ar: 'العلاج الأولي', en: 'Initial treatment' },
+    story: { ar: 'المنسق يجمع البيانات مع الاستشاري. الأكسجين 96%، ولا حساسية عنده.', en: 'The coordinator is gathering details with the consultant. SpO2 is 96% and he has no allergies.' },
+    q: { ar: 'ما العلاج الأولي الصحيح؟', en: 'What is the right initial treatment?' },
+    opts: [
+      { x: { ar: 'أكسجين بالقناع لكل مرضى الجلطات، ومورفين أولاً.', en: 'Oxygen by mask for every infarct, and morphine first.' }, pen: 10,
+        fb: { ar: 'الأكسجين فقط إذا كان التشبع أقل من 90%. والمورفين لا يُعطى روتينياً لأنه يؤخر امتصاص أدوية الصفائح الفموية.', en: 'Oxygen only if SpO2 is below 90%. Morphine is not routine; it delays absorption of oral antiplatelets.' } },
+      { x: { ar: 'أسبرين 300 مجم مضغاً، مراقبة قلبية مستمرة وجهاز صدمات قريب، خط وريدي وتحاليل، وتخطيط للجهة اليمنى (V4R) لأنها جلطة سفلية. مضاد الصفائح الثاني والهيبارين حسب توجيه الاستشاري.', en: 'Aspirin 300 mg chewed, continuous monitoring with the defibrillator close, IV access and labs, and a right-sided ECG (V4R) because it is inferior. The second antiplatelet and heparin as the consultant advises.' }, ok: 1,
+        log: { ar: 'أسبرين 300 مجم مضغاً، مراقبة، خط وريدي، تحاليل', en: 'Aspirin 300 mg chewed, monitor, IV, labs' },
+        fb: { ar: 'العلاج الأولي لـ STEMI:<ul><li>أسبرين 150–300 مجم مضغاً (غير مغلف) إذا لا توجد موانع.</li><li>مراقبة مستمرة وجهاز الصدمات جاهز.</li><li>في الجلطة السفلية: تخطيط V4R للبحث عن جلطة البطين الأيمن.</li><li>مضاد الصفائح الثاني ومضاد التخثر حسب الاستراتيجية التي يقررها الاستشاري.</li></ul>', en: 'Initial STEMI treatment:<ul><li>Aspirin 150–300 mg chewed (non-enteric) if no contraindication.</li><li>Continuous monitoring with the defibrillator ready.</li><li>Inferior STEMI: a V4R to look for right ventricular infarction.</li><li>Second antiplatelet and anticoagulant per the strategy the consultant chooses.</li></ul>' } },
+      { x: { ar: 'نتروجليسرين تحت اللسان ثم نبدأ بالتحاليل.', en: 'Sublingual nitroglycerin, then labs.' }, pen: 10,
+        fb: { ar: 'قبل النترات في الجلطة السفلية لازم تستبعد جلطة البطين الأيمن، لأن النترات قد تسبب هبوطاً شديداً في الضغط. والأسبرين هو الأولوية.', en: 'Before nitrates in an inferior STEMI you must exclude RV infarction, which can make nitrates crash the blood pressure. Aspirin is the priority.' } },
+      { x: { ar: 'ننتظر نتائج التحاليل قبل أي دواء.', en: 'Wait for the labs before any drug.' }, pen: 10,
+        fb: { ar: 'الأسبرين لا ينتظر التحاليل. يُعطى فور التشخيص.', en: 'Aspirin does not wait for labs. It is given as soon as the diagnosis is made.' } },
+    ] },
+  { pt: 1, t: 16, node: 'ed', v: ['64', '86/54', '96', { ar: 'جيبي بطيء', en: 'Sinus brady' }], ecg: 'rv',
+    title: { ar: 'هبوط الضغط', en: 'The pressure drops' },
+    story: { ar: 'تخطيط V4R يظهر ارتفاعاً في ST. الضغط نزل إلى 86/54، والصدر صافٍ. الممرضة جهزت نتروجليسرين للألم.', en: 'V4R shows ST elevation. BP has fallen to 86/54 and the chest is clear. The nurse has nitroglycerin ready for the pain.' },
+    q: { ar: 'ماذا تفعل؟', en: 'What do you do?' },
+    opts: [
+      { x: { ar: 'نعطي النتروجليسرين للألم.', en: 'Give the nitroglycerin for the pain.' }, pen: 15,
+        fb: { ar: 'جلطة البطين الأيمن تعتمد على امتلاء القلب. النترات تقلل الامتلاء وقد تسبب انهياراً في الضغط.', en: 'RV infarction depends on preload. Nitrates cut preload and can collapse the blood pressure.' } },
+      { x: { ar: 'جلطة البطين الأيمن: نوقف النترات، ونعطي سوائل وريدية بحذر (250–500 مل) مع مراقبة الصدر والضغط، ونبلغ استشاري RCC.', en: 'RV infarction: no nitrates, a cautious IV fluid bolus (250–500 ml) watching the chest and BP, and update the RCC consultant.' }, ok: 1,
+        log: { ar: 'V4R إيجابي، ضغط 86/54: لا نترات، سوائل بحذر، إبلاغ الاستشاري', en: 'V4R positive, BP 86/54: no nitrates, cautious fluids, consultant updated' },
+        fb: { ar: 'في جلطة البطين الأيمن:<ul><li>تجنب النترات ومدرات البول.</li><li>سوائل بحذر لدعم الامتلاء، مع مراقبة الرئتين.</li><li>إذا استمر الهبوط: دعم بالأدوية حسب الاستشاري، والإسراع بفتح الشريان.</li></ul>', en: 'In RV infarction:<ul><li>Avoid nitrates and diuretics.</li><li>Cautious fluids to support preload, watching the lungs.</li><li>If hypotension persists: inotropes per the consultant, and faster reperfusion.</li></ul>' } },
+      { x: { ar: 'فوروسيمايد وريدي.', en: 'IV furosemide.' }, pen: 15,
+        fb: { ar: 'مدر البول يقلل الامتلاء ويزيد الهبوط. الصدر صافٍ، فلا يوجد احتقان يُعالَج.', en: 'A diuretic cuts preload and worsens the hypotension. The chest is clear, so there is no congestion to treat.' } },
+      { x: { ar: 'ننتظر حتى يرتفع الضغط وحده.', en: 'Wait for the pressure to recover on its own.' }, pen: 10,
+        fb: { ar: 'الهبوط في جلطة البطين الأيمن يحتاج تدخلاً فورياً، وإبلاغ الاستشاري لأنه قد يغيّر الأولوية.', en: 'Hypotension in RV infarction needs action now, and the consultant must know because it can change priorities.' } },
+    ] },
+  { pt: 1, t: 20, node: 'cons', v: ['72', '104/66', '97', { ar: 'جيبي', en: 'Sinus' }], ecg: 'inf',
+    title: { ar: 'قرار الاستشاري', en: 'The consultant decides' },
+    story: { ar: 'استشاري RCC راجع التخطيط: STEMI سفلي. غرفة القسطرة في المركز متاحة، والوقت المتوقع من التشخيص إلى القسطرة حوالي 90 دقيقة.', en: 'The RCC consultant has reviewed the ECG: inferior STEMI. The cath lab at the center is free, and the expected time from diagnosis to PCI is about 90 minutes.' },
+    q: { ar: 'ما الاستراتيجية المناسبة؟', en: 'What is the right strategy?' },
+    opts: [
+      { x: { ar: 'إذابة هنا ثم نحوله، لنكون في الجانب الآمن.', en: 'Thrombolyse here and then transfer, to be safe.' }, pen: 15,
+        fb: { ar: 'إذا كانت القسطرة ممكنة خلال 120 دقيقة من التشخيص، فهي أفضل من الإذابة: نجاح أعلى ونزيف أقل.', en: 'When PCI is possible within 120 minutes of diagnosis it beats thrombolysis: better reperfusion and less bleeding.' } },
+      { x: { ar: 'قسطرة أولية (PPCI): القبول تم، والهدف خروج المريض من الطوارئ خلال 30 دقيقة من وصوله (Door-in-door-out).', en: 'Primary PCI: accepted, and the target is to have him out of the ED within 30 minutes of arrival (door-in-door-out).' }, ok: 1, ms: ['dec', 21],
+        log: { ar: 'استشاري RCC: قسطرة أولية، تم القبول', en: 'RCC consultant: primary PCI, accepted' },
+        fb: { ar: 'قاعدة الاختيار:<ul><li>القسطرة الأولية إذا كان الوقت المتوقع من التشخيص إلى فتح الشريان 120 دقيقة أو أقل.</li><li>إذا أكثر من 120 دقيقة: إذابة خلال 30 دقيقة من الوصول ثم تحويل.</li><li>القرار للاستشاري، ودور الطوارئ تنفيذه بسرعة.</li></ul>', en: 'The rule:<ul><li>Primary PCI if expected diagnosis-to-reperfusion time is 120 minutes or less.</li><li>Over 120 minutes: thrombolysis within 30 minutes of arrival, then transfer.</li><li>The consultant decides; the ED executes fast.</li></ul>' } },
+      { x: { ar: 'نعالجه هنا دوائياً وننومه في العناية.', en: 'Treat medically here and admit to ICU.' }, pen: 25,
+        fb: { ar: 'STEMI يحتاج فتح الشريان. العلاج الدوائي وحده يترك المنطقة المصابة تموت.', en: 'A STEMI needs reperfusion. Medical treatment alone lets the territory die.' } },
+      { x: { ar: 'ننتظر حتى يستقر الضغط تماماً ثم نقرر.', en: 'Wait until BP is fully stable, then decide.' }, pen: 15,
+        fb: { ar: 'الهبوط سبب إضافي للإسراع بفتح الشريان، وليس للتأخير.', en: 'Hypotension is another reason to reperfuse faster, not to wait.' } },
+    ] },
+  { pt: 1, t: 24, node: 'acc', v: ['74', '108/68', '97', { ar: 'جيبي', en: 'Sinus' }], ecg: 'inf',
+    title: { ar: 'تجهيز النقل', en: 'Getting him moving' },
+    story: { ar: 'المريض مقبول. نتيجة التروبونين والتحاليل لم تصل بعد. الإسعاف لم يُطلب.', en: 'He is accepted. The troponin and other labs are not back yet. No ambulance has been requested.' },
+    q: { ar: 'ما الخطوة الصحيحة؟', en: 'What is the right step?' },
+    opts: [
+      { x: { ar: 'تتصل أنت بالإسعاف، وننتظر التحاليل حتى نرسلها معه.', en: 'You call the ambulance yourself and wait for the labs to send with him.' }, pen: 15,
+        fb: { ar: 'تنسيق الإسعاف مسؤولية منسق RCC مع مركز النقل. والتحاليل لا تؤخر النقل أبداً: تُرسل نتائجها لاحقاً.', en: 'Arranging the ambulance is the RCC coordinator’s job with the Transportation Center. Labs never delay the transfer; results follow.' } },
+      { x: { ar: 'منسق RCC ينسق الإسعاف مع مركز النقل. الطوارئ تجهز فريق النقل (ممرض بمهارات إنعاش وجهاز صدمات)، وتجهز نسخة التخطيط والأدوية المعطاة والخط الزمني. لا ننتظر التحاليل.', en: 'The RCC coordinator arranges the ambulance with the Transportation Center. The ED readies the transfer team (an ACLS nurse and a defibrillator) with the ECG copy, drugs given and the timeline. Labs are not awaited.' }, ok: 1, ms: ['out', 28],
+        log: { ar: 'الإسعاف وصل، خرج المريض للقسطرة (Door-in-door-out)', en: 'Ambulance arrived; patient left for PCI (door-in-door-out)' },
+        fb: { ar: 'Door-in-door-out خلال 30 دقيقة:<ul><li>المنسق ومركز النقل يتابعون الإسعاف ويبلغون المستشفى المستقبِل.</li><li>الطوارئ تجهز الفريق والملف، ولا تؤخر الخروج لأي فحص.</li><li>الخط الزمني يُوثَّق: الوصول، التخطيط، الاتصال، القرار، الخروج.</li></ul>', en: 'Door-in-door-out within 30 minutes:<ul><li>The coordinator and Transportation Center track the ambulance and notify the receiving hospital.</li><li>The ED prepares the team and the file and delays the departure for nothing.</li><li>The timeline is documented: arrival, ECG, call, decision, departure.</li></ul>' } },
+      { x: { ar: 'ننتظر حتى يختفي الألم ثم ننقله.', en: 'Wait for the pain to settle before moving him.' }, pen: 15,
+        fb: { ar: 'استمرار الألم يعني أن الشريان مغلق، وهذا سبب للإسراع.', en: 'Ongoing pain means the artery is still shut; that is a reason to hurry.' } },
+      { x: { ar: 'يُنقل مع ممرض فقط بدون جهاز صدمات لأن الضغط تحسن.', en: 'Send him with a nurse only and no defibrillator, since BP has improved.' }, pen: 15,
+        fb: { ar: 'خطر الرجفان البطيني أعلى في الساعات الأولى. جهاز الصدمات ومن يجيد استخدامه إلزاميان.', en: 'VF risk is highest in the first hours. A defibrillator and someone who can use it are mandatory.' } },
+    ] },
+  { pt: 1, t: 90, node: 'center', v: ['74', '110/70', '98', { ar: 'جيبي', en: 'Sinus' }], ecg: 'inf',
+    title: { ar: 'الوصول للمركز', en: 'Arrival at the center' },
+    story: { ar: 'الإسعاف وصل المركز المختص. المسعف يسأل: نروح للطوارئ ونسجله أولاً؟', en: 'The ambulance reaches the specialized center. The paramedic asks whether to go to the ED and register first.' },
+    q: { ar: 'أين يذهب المريض المقبول للقسطرة الأولية؟', en: 'Where does an accepted primary-PCI patient go?' },
+    opts: [
+      { x: { ar: 'إلى طوارئ المركز لإعادة التقييم والتخطيط.', en: 'To the center’s ED for reassessment and a repeat ECG.' }, pen: 15,
+        fb: { ar: 'المرور على الطوارئ يضيف 20–30 دقيقة بلا فائدة. القرار اتُّخذ عبر RCC.', en: 'Passing through the ED adds 20–30 useless minutes. The decision was already made through RCC.' } },
+      { x: { ar: 'مباشرة إلى غرفة القسطرة، متجاوزاً الطوارئ.', en: 'Straight to the cath lab, bypassing the ED.' }, ok: 1,
+        log: { ar: 'وصل المركز، مباشرة لغرفة القسطرة: فُتح الشريان', en: 'At the center, straight to the cath lab: artery opened' },
+        fb: { ar: 'حسب سير عمل RCC: المقبول للقسطرة الأولية يذهب مباشرة لغرفة القسطرة، والحالات الأخرى تُقيَّم في الطوارئ. المركز المختص يرتب القبول ويستقبل الحالة.', en: 'Per the RCC workflow, an accepted primary-PCI patient goes direct to the cath lab; other cases are assessed in the ED. The specialized center arranges admission and receives him.' } },
+      { x: { ar: 'إلى العناية القلبية حتى يستقر، ثم القسطرة.', en: 'To the CCU to stabilise, then PCI.' }, pen: 15,
+        fb: { ar: 'الاستقرار يأتي بفتح الشريان. التأخير في العناية يضيع عضلة القلب.', en: 'Stability comes from opening the artery. A stop in the CCU loses muscle.' } },
+      { x: { ar: 'إلى مكتب الدخول لفتح ملف.', en: 'To the admissions desk to open a file.' }, pen: 15,
+        fb: { ar: 'الملف يُفتح والمريض في غرفة القسطرة. لا شيء يسبق فتح الشريان.', en: 'The file is opened while he is on the table. Nothing comes before reperfusion.' } },
+    ] },
+
+  /* Patient 2: anterior STEMI, PCI over 120 minutes, thrombolysis advised */
+  { pt: 2, t: 6, node: 'cons', v: ['104', '150/92', '96', { ar: 'جيبي', en: 'Sinus' }], ecg: 'ant', lysis: 1,
+    title: { ar: 'مريض ثانٍ', en: 'A second patient' },
+    story: { ar: 'نفس الليلة. رجل 46 سنة، ألم صدر منذ 90 دقيقة. التخطيط خلال 6 دقائق: STEMI أمامي (V1–V4). اتصلت بـ RCC، والاستشاري يقول: غرفة القسطرة مشغولة بحالة طارئة، والوقت المتوقع للقسطرة أكثر من 150 دقيقة.', en: 'Same night. A 46-year-old man, chest pain for 90 minutes. ECG at 6 minutes: anterior STEMI (V1–V4). You called RCC, and the consultant says the cath lab is busy with an emergency and the expected time to PCI is over 150 minutes.' },
+    q: { ar: 'ما المتوقع من الاستشاري؟', en: 'What should the consultant advise?' },
+    opts: [
+      { x: { ar: 'ننتظر حتى تفرغ غرفة القسطرة، فهي الأفضل دائماً.', en: 'Wait for the cath lab to free up; PCI is always better.' }, pen: 20,
+        fb: { ar: 'القسطرة أفضل فقط إذا كانت خلال 120 دقيقة. بعدها، الإذابة المبكرة تنقذ عضلة أكثر.', en: 'PCI is better only within 120 minutes. Beyond that, early thrombolysis saves more muscle.' } },
+      { x: { ar: 'إذابة في الطوارئ بتوصية استشاري RCC، خلال 30 دقيقة من الوصول، ثم تحويل للمركز.', en: 'Thrombolysis in the ED on the RCC consultant’s advice, within 30 minutes of arrival, then transfer to the center.' }, ok: 1, ms: ['rcc', 9], ms2: ['dec', 13],
+        log: { ar: 'استشاري RCC: القسطرة > 120 دقيقة، أوصى بالإذابة', en: 'RCC consultant: PCI > 120 min, thrombolysis advised' },
+        fb: { ar: 'عندما يتجاوز الوقت المتوقع للقسطرة 120 دقيقة:<ul><li>الإذابة خلال 30 دقيقة من الوصول (Door-to-needle).</li><li>بتوصية الاستشاري، وبعد مراجعة موانع الإذابة.</li><li>ثم تحويل للمركز في كل الأحوال (الاستراتيجية الدوائية التداخلية).</li></ul>', en: 'When expected PCI time exceeds 120 minutes:<ul><li>Thrombolysis within 30 minutes of arrival (door-to-needle).</li><li>On the consultant’s advice, after the contraindication checklist.</li><li>Then transfer to the center in every case (pharmaco-invasive strategy).</li></ul>' } },
+      { x: { ar: 'نعالجه دوائياً بالهيبارين فقط وننتظر للصباح.', en: 'Heparin alone, and wait until morning.' }, pen: 25,
+        fb: { ar: 'الهيبارين لا يفتح الشريان المغلق. STEMI يحتاج فتح الشريان الآن.', en: 'Heparin does not open an occluded artery. A STEMI needs reperfusion now.' } },
+      { x: { ar: 'نحوله لأي مستشفى آخر فيه قسطرة بدون المرور على RCC.', en: 'Send him to any other PCI hospital without going through RCC.' }, pen: 15,
+        fb: { ar: 'RCC يعرف حالة كل غرفة قسطرة في التجمع، ويوجه المريض للمركز المناسب. التحويل خارج المسار قد ينتهي بمريض بلا سرير.', en: 'RCC knows the status of every cath lab in the cluster and directs the patient to the right center. A transfer outside the pathway can end with no bed.' } },
+    ] },
+  { pt: 2, t: 16, node: 'ed', v: ['100', '165/95', '97', { ar: 'جيبي', en: 'Sinus' }], ecg: 'ant', lysis: 1,
+    title: { ar: 'قائمة موانع الإذابة', en: 'The contraindication checklist' },
+    story: { ar: 'قبل الإذابة راجعت القائمة: لا نزيف حالي، لا جلطة دماغية أو نزيف دماغي سابق، لا عمليات أو إصابات رأس حديثة، لا يتناول مميعات. الضغط 165/95. الوزن 80 كجم.', en: 'Before thrombolysis you run the checklist: no active bleeding, no previous stroke or brain bleed, no recent surgery or head injury, no anticoagulants. BP 165/95. Weight 80 kg.' },
+    q: { ar: 'ما قرارك؟', en: 'What is your call?' },
+    opts: [
+      { x: { ar: 'نؤجل الإذابة حتى ينزل الضغط تحت 140.', en: 'Delay thrombolysis until BP is below 140.' }, pen: 15,
+        fb: { ar: 'الضغط 165/95 ليس مانعاً. المانع النسبي هو الضغط غير المسيطر عليه فوق 180/110. التأخير هنا يضيّع الهدف (30 دقيقة).', en: '165/95 is not a contraindication. The relative one is uncontrolled BP above 180/110. Delaying here misses the 30-minute target.' } },
+      { x: { ar: 'لا يوجد مانع مطلق. ابدأ الإذابة الآن حسب البروتوكول وتوجيه الاستشاري (الجرعة حسب الوزن)، مع مضادات الصفائح ومضاد التخثر المصاحب.', en: 'No absolute contraindication. Start thrombolysis now per protocol and the consultant (weight-based dose), with the accompanying antiplatelets and anticoagulant.' }, ok: 1, ms: ['out', 24],
+        log: { ar: 'بدء الإذابة (Door-to-needle)', en: 'Thrombolysis started (door-to-needle)' },
+        fb: { ar: 'موانع الإذابة المطلقة:<ul><li>أي نزيف دماغي سابق، أو ورم أو تشوه وعائي في الدماغ.</li><li>جلطة دماغية خلال 3 أشهر.</li><li>اشتباه تسلخ الأبهر.</li><li>نزيف نشط، أو إصابة رأس أو وجه شديدة خلال 3 أشهر.</li></ul>ما عدا ذلك يُراجع مع الاستشاري، ولا يؤخر البدء.', en: 'Absolute contraindications:<ul><li>Any previous intracranial bleed, or a brain tumour or vascular malformation.</li><li>Ischaemic stroke within 3 months.</li><li>Suspected aortic dissection.</li><li>Active bleeding, or serious head or facial injury within 3 months.</li></ul>Anything else is discussed with the consultant and does not delay the start.' } },
+      { x: { ar: 'نسحب تحاليل التخثر وننتظر النتيجة قبل البدء.', en: 'Send clotting studies and wait for them before starting.' }, pen: 15,
+        fb: { ar: 'في مريض لا يتناول مميعات وبلا تاريخ نزيف، لا يُنتظر التخثر لبدء الإذابة.', en: 'In a patient on no anticoagulants with no bleeding history, clotting results are not awaited.' } },
+      { x: { ar: 'نعطي نصف الجرعة احتياطاً.', en: 'Give half the dose to be safe.' }, pen: 10,
+        fb: { ar: 'الجرعة حسب البروتوكول والوزن. تقليل الجرعة اعتباطياً يقلل فرصة فتح الشريان.', en: 'The dose follows the protocol and weight. Cutting it arbitrarily lowers the chance of reperfusion.' } },
+    ] },
+  { pt: 2, t: 60, node: 'ed', v: ['72', '138/84', '98', { ar: 'بطيني بطيء', en: 'AIVR' }], ecg: 'aivr', lysis: 1,
+    title: { ar: 'نظم جديد', en: 'A new rhythm' },
+    story: { ar: 'بعد 35 دقيقة من الإذابة الألم خف كثيراً. الشاشة تظهر نظماً بطينياً منتظماً بمعدل 72، والضغط 138/84، والمريض يتكلم.', en: '35 minutes after thrombolysis the pain has eased a lot. The monitor shows a regular wide-complex rhythm at 72, BP 138/84, and he is talking.' },
+    q: { ar: 'ما هذا النظم، وماذا تفعل؟', en: 'What is this rhythm, and what do you do?' },
+    opts: [
+      { x: { ar: 'تسرع بطيني: صدمة كهربائية متزامنة فوراً.', en: 'VT: synchronised cardioversion now.' }, pen: 15,
+        fb: { ar: 'المعدل 72 وليس سريعاً. هذا نظم بطيني معجَّل (AIVR)، والصدمة له غير مطلوبة وقد تضر.', en: 'A rate of 72 is not fast. This is AIVR; shocking it is not indicated and may harm.' } },
+      { x: { ar: 'نظم بطيني معجَّل (AIVR): علامة على عودة التروية. لا يحتاج علاجاً، نراقبه، ونقيّم نجاح الإذابة بتخطيط بعد 60–90 دقيقة.', en: 'AIVR: a sign of reperfusion. It needs no treatment; watch it, and assess lysis success with an ECG at 60–90 minutes.' }, ok: 1,
+        log: { ar: 'AIVR بعد الإذابة: علامة عودة التروية، مراقبة', en: 'AIVR after lysis: reperfusion sign, observed' },
+        fb: { ar: 'علامات نجاح الإذابة:<ul><li>تحسن الألم.</li><li>انخفاض ارتفاع ST بنسبة 50% أو أكثر بعد 60–90 دقيقة.</li><li>اضطرابات نظم عودة التروية مثل AIVR، وهي عادة لا تحتاج علاجاً.</li></ul>', en: 'Signs of successful lysis:<ul><li>Pain relief.</li><li>ST elevation falling by 50% or more at 60–90 minutes.</li><li>Reperfusion arrhythmias such as AIVR, which usually need no treatment.</li></ul>' } },
+      { x: { ar: 'أميودارون وريدي لمنع تحوله لرجفان.', en: 'IV amiodarone to stop it turning into VF.' }, pen: 10,
+        fb: { ar: 'مضادات النظم لا تُعطى لـ AIVR، وقد تُبطئ القلب وتسبب هبوطاً.', en: 'Antiarrhythmics are not given for AIVR and can cause bradycardia and hypotension.' } },
+      { x: { ar: 'نوقف الإذابة لأنها سببت اضطراب النظم.', en: 'Stop the lysis; it caused the arrhythmia.' }, pen: 10,
+        fb: { ar: 'هذا النظم علامة جيدة على فتح الشريان، وليس مضاعفة تستدعي الإيقاف.', en: 'This rhythm is a good sign that the artery opened, not a complication to stop for.' } },
+    ] },
+  { pt: 2, t: 100, node: 'acc', v: ['80', '132/80', '98', { ar: 'جيبي', en: 'Sinus' }], ecg: 'sinus', lysis: 1,
+    title: { ar: 'بعد الإذابة', en: 'After lysis' },
+    story: { ar: 'التخطيط بعد 90 دقيقة: ارتفاع ST انخفض أكثر من 50%، والألم زال. الأهل يسألون: خلاص؟ يبقى عندكم؟', en: 'ECG at 90 minutes: ST elevation has fallen by more than 50% and the pain is gone. The family asks whether he can stay with you now.' },
+    q: { ar: 'ما الخطة؟', en: 'What is the plan?' },
+    opts: [
+      { x: { ar: 'نجحت الإذابة، ينوَّم عندنا في العناية ولا يحتاج تحويلاً.', en: 'Lysis worked; admit him to our ICU, no transfer needed.' }, pen: 20,
+        fb: { ar: 'نجاح الإذابة لا يكفي: الشريان قد ينغلق مرة ثانية. كل مريض إذابة يُحوَّل لمركز القسطرة.', en: 'Successful lysis is not the end: the artery can re-occlude. Every lysed patient goes to a PCI center.' } },
+      { x: { ar: 'تحويل عبر RCC إلى المركز للقسطرة خلال 2–24 ساعة (الاستراتيجية الدوائية التداخلية). ولو فشلت الإذابة كان التحويل فورياً لقسطرة إنقاذية.', en: 'Transfer through RCC to the center for angiography within 2–24 hours (pharmaco-invasive). Had lysis failed, the transfer would be immediate for rescue PCI.' }, ok: 1,
+        log: { ar: 'نجاح الإذابة، تحويل عبر RCC للقسطرة خلال 2–24 ساعة', en: 'Lysis successful; transfer via RCC for angiography in 2–24 h' },
+        fb: { ar: 'بعد الإذابة:<ul><li>نجحت (انخفاض ST 50% أو أكثر): قسطرة خلال 2–24 ساعة.</li><li>فشلت: قسطرة إنقاذية فوراً.</li><li>في الحالتين يمر التحويل عبر RCC، والنقل بفريق وجهاز صدمات.</li></ul>', en: 'After lysis:<ul><li>Successful (ST down 50% or more): angiography within 2–24 hours.</li><li>Failed: immediate rescue PCI.</li><li>Either way the transfer goes through RCC, with a team and a defibrillator.</li></ul>' } },
+      { x: { ar: 'نعطيه جرعة إذابة ثانية للتأكد.', en: 'Give a second dose of lytic to be sure.' }, pen: 15,
+        fb: { ar: 'تكرار الإذابة لا يُنصح به، ويزيد النزيف. إذا فشلت الإذابة فالحل قسطرة إنقاذية.', en: 'Repeat lysis is not recommended and raises bleeding risk. If lysis fails, the answer is rescue PCI.' } },
+      { x: { ar: 'نخرجه بعد 24 ساعة مع موعد عيادة قلب.', en: 'Discharge after 24 hours with a cardiology clinic appointment.' }, pen: 20,
+        fb: { ar: 'مريض STEMI بعد الإذابة يحتاج قسطرة وتقييم، وليس خروجاً.', en: 'A STEMI patient after lysis needs angiography and evaluation, not discharge.' } },
+    ] },
+];
+
+const $ = (id) => document.getElementById(id);
+const S = { i: -1, pen: 0, tries: 0, tried: [], res: [], view: 'intro', k: -1, log: [], ms: {}, pt: 0, t: null, v: null, ecg: null, node: null, lysis: 0 };
+const myo = () => Math.max(0, 100 - Math.round(S.pen / 2));
+const stamp = (kind) => '<svg class="stamp ' + kind + '" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29"></circle><path d="' + (kind === 'ok' ? 'M19 33l9 9 17-19' : 'M22 22l20 20M42 22L22 42') + '"></path></svg>';
+const clockTxt = (m) => (m === null ? '--' : Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'));
+const TARGET = { ecg: 10, out: 30 };
+
+/* ECG drawing */
+function beat(x, y, st, wide) {
+  if (wide) return ' L' + (x + 8) + ' ' + y + ' L' + (x + 14) + ' ' + (y - 26) + ' L' + (x + 24) + ' ' + (y + 14) + ' L' + (x + 32) + ' ' + y + ' Q' + (x + 44) + ' ' + (y + 10) + ' ' + (x + 56) + ' ' + y;
+  return ' L' + (x + 10) + ' ' + y + ' Q' + (x + 14) + ' ' + (y - 4) + ' ' + (x + 18) + ' ' + y + ' L' + (x + 22) + ' ' + y +
+    ' L' + (x + 24) + ' ' + (y + 3) + ' L' + (x + 27) + ' ' + (y - 24) + ' L' + (x + 30) + ' ' + (y + 6) + ' L' + (x + 32) + ' ' + (y - st) +
+    ' Q' + (x + 40) + ' ' + (y - st - 3) + ' ' + (x + 44) + ' ' + (y - st - 9 - Math.max(0, st) * 0.3) + ' Q' + (x + 49) + ' ' + (y - st * 0.3) + ' ' + (x + 54) + ' ' + y;
+}
+function drawEcg(kind) {
+  const svg = $('ecg');
+  if (!kind) {
+    svg.innerHTML = '<text class="none" x="300" y="80" text-anchor="middle">' + L({ ar: 'لم يُعمل التخطيط بعد', en: 'No ECG yet' }) + '</text>';
+    return;
+  }
+  if (kind === 'aivr') {
+    let d = 'M4 80';
+    for (let x = 4; x < 590; x += 82) d += beat(x, 80, 0, true) + ' L' + (x + 82) + ' 80';
+    svg.innerHTML = '<text x="6" y="16">II · AIVR 72</text><path d="' + d + '"></path>';
+    return;
+  }
+  const leads = ECGS[kind];
+  svg.innerHTML = leads.map((l, k) => {
+    const col = k % 2, row = Math.floor(k / 2), x0 = col * 300 + 6, y = 52 + row * 72;
+    let d = 'M' + x0 + ' ' + y;
+    for (let b = 0; b < 4; b++) { const x = x0 + 26 + b * 66; d += ' L' + x + ' ' + y + beat(x, y, l[1]); }
+    d += ' L' + (x0 + 288) + ' ' + y;
+    return '<text x="' + (x0 + 2) + '" y="' + (y - 28) + '">' + l[0] + '</text><path d="' + d + '"></path>';
+  }).join('');
+}
+function setMon(sc) {
+  S.v = sc.v; S.ecg = sc.ecg;
+  $('vHr').textContent = sc.v[0]; $('vBp').textContent = sc.v[1]; $('vSp').textContent = sc.v[2]; $('vRh').textContent = L(sc.v[3]);
+  drawEcg(sc.ecg);
+}
+function drawMon() {
+  if (S.v) { $('vHr').textContent = S.v[0]; $('vBp').textContent = S.v[1]; $('vSp').textContent = S.v[2]; $('vRh').textContent = L(S.v[3]); }
+  else { $('vHr').textContent = '--'; $('vBp').textContent = '--/--'; $('vSp').textContent = '--'; $('vRh').textContent = '--'; }
+  drawEcg(S.ecg);
+  $('pt').className = 'pt' + (S.pt ? '' : ' idle');
+  $('ptTxt').textContent = S.pt ? L(PATIENTS[S.pt]) : L(UI.idle);
+  $('mOutL').textContent = L(S.lysis ? UI.mOutLysis : UI.mOutPci);
+  ['ecg', 'rcc', 'dec', 'out'].forEach((k) => {
+    const el = $('m-' + k), m = S.ms[k];
+    el.querySelector('b').textContent = m === undefined ? '--' : m;
+    el.classList.remove('ok', 'late');
+    if (m !== undefined && TARGET[k]) el.classList.add(m <= TARGET[k] ? 'ok' : 'late');
+    else if (m !== undefined) el.classList.add('ok');
+  });
+}
+function setMs(k, m) {
+  S.ms[k] = m;
+  drawMon();
+  const el = $('m-' + k); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+}
+function setClock(m) {
+  S.t = m;
+  $('clock').textContent = clockTxt(m);
+  const c = myo(), el = $('myo');
+  el.textContent = c + '%'; el.className = c >= 80 ? 'g' : c >= 60 ? 'a' : 'r';
+}
+function drawFlow() {
+  const order = FLOW.map((f) => f[0]);
+  const at = order.indexOf(S.node);
+  let html = FLOW.map((f, k) => {
+    const cls = S.node === f[0] ? ' on' : (at > k ? ' done' : '');
+    const body = f[0] === 'ed' && S.lysis
+      ? L({ ar: 'الإذابة في الطوارئ بتوصية RCC، ثم تحويل للمركز.', en: 'Thrombolysis in the ED on RCC advice, then transfer to the center.' })
+      : L(f[3]);
+    return (k ? '<li class="arrow" aria-hidden="true">▼</li>' : '') +
+      '<li class="node' + cls + (f[0] === 'ed' && S.lysis ? ' lysis' : '') + '"><span class="ic">' + f[1] + '</span><div><b>' + L(f[2]) + '</b><span>' + body + '</span></div></li>';
+  }).join('');
+  $('flowList').innerHTML = html;
+  $('targets').innerHTML = TARGETS.map((t) => '<div class="tg"><b>' + t[0] + '</b><span>' + L(t[1]) + '</span></div>').join('');
+}
+function addLog(entry) { S.log.push(entry); drawLog(); }
+function drawLog() {
+  $('log').innerHTML = S.log.length
+    ? S.log.map((e) => e.sep ? '<li class="sep">' + L(e.sep) + '</li>' : '<li><time>+' + clockTxt(e.m) + '</time><span>' + L(e.x) + '</span></li>').join('')
+    : '<li class="empty">' + L(UI.logEmpty) + '</li>';
+}
+
+/* Screens */
+const card = $('card');
+function stepsHtml() {
+  return '<div class="steps" aria-hidden="true">' + SCENES.map((_, k) => {
+    const r = S.res[k];
+    return '<i class="' + (r === undefined ? (k === S.i ? 'now' : '') : (r === 0 ? 'done' : 'miss')) + '"></i>';
+  }).join('') + '</div>';
+}
+function intro() {
+  S.view = 'intro';
+  card.className = 'card panel';
+  card.innerHTML =
+    '<span class="eyebrow">' + L({ ar: 'لعبة تدريبية للأطباء والتمريض · مسار الرعاية العاجلة لـ STEMI عبر RCC', en: 'Training game for physicians and nurses · STEMI urgent care pathway through RCC' }) + '</span>' +
+    '<h1>' + L({ ar: 'STEMI: الوقت عضلة', en: 'STEMI: time is muscle' }) + '</h1>' +
+    '<p class="story">' + L({ ar: 'ليلة في طوارئ مستشفى بلا غرفة قسطرة. مريضان بجلطة قلبية حادة، وأنت الطبيب المناوب. المريض الأول يمشي في مسار القسطرة الأولية، والثاني في مسار الإذابة.', en: 'A night in an ED with no cath lab. Two patients with acute STEMI, and you are the physician on duty. The first goes down the primary PCI path, the second down the thrombolysis path.' }) + '</p>' +
+    '<p class="story">' + L({ ar: 'أمامك ' + SCENES.length + ' قراراً. كل قرار خاطئ يضيّع دقائق، ومع كل دقيقة تموت عضلة قلب. تابع على الشاشة الأوقات المستهدفة: التخطيط خلال 10 دقائق، والخروج للقسطرة أو بدء الإذابة خلال 30 دقيقة. أقل من 60% من عضلة القلب يعني أنك خسرت المريض.', en: 'You have ' + SCENES.length + ' decisions. Every wrong call loses minutes, and with every minute heart muscle dies. Watch the targets on the monitor: ECG within 10 minutes, and out to PCI or lysis started within 30. Below 60% myocardium saved, you have lost the patient.' }) + '</p>' +
+    '<button class="go" id="startBtn" type="button">' + L(UI.start) + '</button>';
+  $('startBtn').onclick = () => { S.pen = 0; S.res = []; S.log = []; drawLog(); go(0); };
+}
+function go(i) {
+  S.i = i; S.tries = 0; S.tried = [];
+  const sc = SCENES[i];
+  if (sc.pt !== S.pt) {
+    S.pt = sc.pt; S.ms = {}; S.lysis = 0;
+    addLog({ sep: PATIENTS[sc.pt] });
+    if (sc.pt === 2) setMs('ecg', 6);
+  }
+  if (sc.lysis) S.lysis = 1;
+  S.node = sc.node;
+  setMon(sc); setClock(sc.t); drawMon(); drawFlow();
+  ask(i);
+}
+function ask(i) {
+  S.view = 'ask';
+  const sc = SCENES[i];
+  card.className = 'card panel';
+  card.innerHTML = stepsHtml() +
+    '<span class="eyebrow">' + L(PATIENTS[sc.pt]).split(' · ')[0] + ' · ' + L(UI.decision) + ' ' + (i + 1) + ' ' + L(UI.of) + ' ' + SCENES.length + '</span>' +
+    '<h1>' + L(sc.title) + '</h1><p class="story">' + L(sc.story) + '</p><p class="q">' + L(sc.q) + '</p>' +
+    '<div class="opts">' + sc.opts.map((o, k) => {
+      const used = S.tried.includes(k);
+      return '<button class="opt' + (used ? ' wrong' : '') + '" type="button" id="opt-' + k + '"' + (used ? ' disabled' : '') + '>' + L(o.x) + '</button>';
+    }).join('') + '</div>';
+  sc.opts.forEach((o, k) => { $('opt-' + k).onclick = () => pick(i, k); });
+}
+/* Every choice gets its own verdict screen: what it cost, then why. */
+function pick(i, k, redraw) {
+  S.view = 'pick'; S.k = k;
+  const sc = SCENES[i], o = sc.opts[k], last = i === SCENES.length - 1;
+  const head = (kind, title) => stepsHtml() +
+    '<div class="verdict">' + stamp(kind) + '<div><span class="eyebrow">' + L(UI.decision) + ' ' + (i + 1) + ' ' + L(UI.of) + ' ' + SCENES.length + ' · ' + L(sc.title) + '</span><h1>' + title + '</h1></div></div>' +
+    '<p class="chose">' + L(UI.yourCall) + L(o.x) + '</p>';
+  if (!o.ok) {
+    if (!redraw) { S.tries++; S.tried.push(k); S.pen += o.pen; setClock(S.t); }
+    card.className = 'card panel' + (redraw ? '' : ' is-no');
+    card.innerHTML = head('no', L(UI.wrong)) +
+      '<div class="score"><div><b>+' + o.pen + '</b><span>' + L(UI.lost) + '</span></div>' +
+      '<div><b>' + myo() + '%</b><span>' + L(UI.myoLeft) + '</span></div></div>' +
+      '<div class="fb no"><strong>' + L(UI.whyNo) + '</strong>' + L(o.fb) + '</div>' +
+      '<button class="go" id="retryBtn" type="button">' + L(UI.back) + '</button>';
+    $('retryBtn').onclick = () => ask(i);
+    return;
+  }
+  if (!redraw) {
+    S.res[i] = S.tries;
+    /* a wrong call delays the milestone it belongs to */
+    const late = sc.opts.filter((_, j) => S.tried.includes(j)).reduce((a, x) => a + x.pen, 0);
+    if (o.ms) setMs(o.ms[0], o.ms[1] + late);
+    if (o.ms2) setMs(o.ms2[0], o.ms2[1] + late);
+    addLog({ m: sc.t + late, x: o.log });
+  }
+  card.className = 'card panel is-ok';
+  card.innerHTML = head('ok', L(S.res[i] ? UI.right : UI.rightFirst)) +
+    '<div class="score"><div><b>' + myo() + '%</b><span>' + L(UI.myoLeft) + '</span></div></div>' +
+    '<div class="fb ok"><strong>' + L(UI.whyOk) + '</strong>' + L(o.fb) + '</div>' +
+    '<button class="go" id="nextBtn" type="button">' + L(last ? UI.debrief : UI.next) + '</button>';
+  $('nextBtn').onclick = () => (last ? finish() : go(i + 1));
+}
+function finish() {
+  S.view = 'finish';
+  const first = S.res.filter((r) => r === 0).length, pass = myo() >= 60;
+  card.className = 'card panel ' + (pass ? 'is-ok' : 'is-no');
+  card.innerHTML = stepsHtml() +
+    '<div class="verdict">' + stamp(pass ? 'ok' : 'no') + '<div><span class="eyebrow">' + L({ ar: 'التقييم', en: 'Debrief' }) + '</span><h1>' +
+      L(pass ? { ar: 'أنقذت عضلة القلب', en: 'Muscle saved' } : { ar: 'ضاع وقت كثير', en: 'Too much time lost' }) + '</h1></div></div>' +
+    '<p class="story">' + L(pass
+      ? (first === SCENES.length ? { ar: 'أداء نموذجي في المسار من أول قرار لآخره. المريضان وصلا للعلاج في الوقت.', en: 'A textbook run of the pathway from first call to last. Both patients reached treatment in time.' } : { ar: 'المريضان وصلا للعلاج، مع نقاط تستحق المراجعة بالأسفل.', en: 'Both patients reached treatment, with points worth reviewing below.' })
+      : { ar: 'التأخير في القرارات كلّف عضلة قلب كثيرة. راجع النقاط بالأسفل والعب مرة ثانية.', en: 'Delays cost a lot of heart muscle. Review the points below and play again.' }) + '</p>' +
+    '<div class="score">' +
+      '<div><b>' + myo() + '%</b><span>' + L({ ar: 'عضلة القلب المُنقَذة (60% أو أكثر للنجاح)', en: 'myocardium saved (60% or more to pass)' }) + '</span></div>' +
+      '<div><b>' + first + '/' + SCENES.length + '</b><span>' + L({ ar: 'قرارات صحيحة من أول مرة', en: 'decisions right on the first call' }) + '</span></div>' +
+      '<div><b>+' + S.pen + '</b><span>' + L({ ar: 'دقيقة ضاعت في قرارات خاطئة', en: 'minutes lost to wrong calls' }) + '</span></div>' +
+    '</div>' +
+    '<ul class="review">' + SCENES.map((sc, k) => '<li><span>' + (k + 1) + '. ' + L(sc.title) + '</span><span class="' + (S.res[k] ? 'n' : 'y') + '">' + (S.res[k] ? UI.wrongN[LANG](S.res[k]) : L(UI.firstCall)) + '</span></li>').join('') + '</ul>' +
+    '<button class="go" id="againBtn" type="button">' + L(UI.again) + '</button>' +
+    '<p class="note">' + L({ ar: 'مبنية على سير عمل RCC لمسار STEMI في تجمع جازان الصحي وتوصيات AHA/ESC. للتدريب فقط، والقرار السريري حسب البروتوكول المعتمد واستشاري RCC.', en: 'Based on the Jazan Health Cluster RCC STEMI workflow and AHA/ESC guidance. For training only; clinical decisions follow the approved protocol and the RCC consultant.' }) + '</p>';
+  $('againBtn').onclick = () => {
+    Object.assign(S, { i: -1, pen: 0, res: [], log: [], ms: {}, pt: 0, t: null, v: null, ecg: null, node: null, lysis: 0 });
+    drawLog(); setClock(null); drawMon(); drawFlow(); intro();
+  };
+}
+
+/* Language: flips direction and redraws whatever is on screen without losing progress */
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = LANG === 'ar' ? 'rtl' : 'ltr';
+  document.title = LANG === 'ar' ? 'لعبة مسار STEMI' : 'STEMI Pathway Game';
+  $('langBtn').textContent = LANG === 'ar' ? 'English' : 'العربية';
+  $('ecg').setAttribute('aria-label', L({ ar: 'تخطيط القلب', en: 'ECG' }));
+  document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = L(UI[el.dataset.t]); });
+  setClock(S.t); drawMon(); drawFlow(); drawLog();
+  if (S.view === 'intro') intro();
+  else if (S.view === 'ask') ask(S.i);
+  else if (S.view === 'pick') pick(S.i, S.k, true);
+  else finish();
+}
+$('langBtn').onclick = () => {
+  LANG = LANG === 'ar' ? 'en' : 'ar';
+  try { localStorage.setItem('stemi-lang', LANG); } catch (e) {}
+  applyLang();
+};
+applyLang();
+</script>
