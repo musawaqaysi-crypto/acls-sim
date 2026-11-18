@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>STEMI Pathway Game</title>
+<title>STEMI Code Simulator</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Great+Vibes&display=swap">
 <style>
@@ -229,8 +229,8 @@ const UI = {
   next: { ar: 'القرار التالي', en: 'Next decision' },
   debrief: { ar: 'اعرض التقييم', en: 'Show my debrief' },
   logged: { ar: 'من الوصول، مسجّل', en: 'from arrival, logged' },
-  start: { ar: 'ابدأ اللعبة', en: 'Start the game' },
-  again: { ar: 'العب مرة ثانية', en: 'Play again' },
+  start: { ar: 'ابدأ المحاكاة', en: 'Start the simulation' },
+  again: { ar: 'أعد المحاكاة', en: 'Run it again' },
   firstCall: { ar: 'من أول مرة', en: 'first call' },
   wrongN: { ar: (n) => n + (n > 1 ? ' قرارات خاطئة' : ' قرار خاطئ'), en: (n) => n + ' wrong ' + (n > 1 ? 'calls' : 'call') },
 };
@@ -563,7 +563,7 @@ function intro() {
   S.view = 'intro';
   card.className = 'card panel';
   card.innerHTML =
-    '<span class="eyebrow">' + L({ ar: 'لعبة تدريبية للأطباء والتمريض · مسار الرعاية العاجلة لـ STEMI عبر RCC', en: 'Training game for physicians and nurses · STEMI urgent care pathway through RCC' }) + '</span>' +
+    '<span class="eyebrow">' + L({ ar: 'محاكاة تدريبية للأطباء والتمريض · مسار الرعاية العاجلة لـ STEMI عبر RCC', en: 'Training simulation for physicians and nurses · STEMI urgent care pathway through RCC' }) + '</span>' +
     '<h1>' + L({ ar: 'STEMI: الوقت عضلة', en: 'STEMI: time is muscle' }) + '</h1>' +
     '<p class="story">' + L({ ar: 'ليلة في طوارئ مستشفى صامطة العام، ولا توجد فيه غرفة قسطرة. مريضان بجلطة قلبية حادة، وأنت الطبيب المناوب. كل قرار يمشي حسب مسار STEMI في تجمع جازان الصحي: المريض الأول يُحوَّل للقسطرة الأولية، والثاني يأخذ الإذابة عندنا ثم يُحوَّل.', en: 'A night in the ED of Samtah General Hospital, which has no cath lab. Two patients with acute STEMI, and you are the physician on duty. Every call follows the Jazan Health Cluster STEMI pathway: the first is transferred for primary PCI, the second is thrombolysed here and then transferred.' }) + '</p>' +
     '<p class="story">' + L({ ar: 'أمامك ' + SCENES.length + ' قراراً. كل قرار خاطئ يضيّع دقائق، ومع كل دقيقة تموت عضلة قلب. تابع على الشاشة الأوقات المستهدفة: التخطيط خلال 10 دقائق، والخروج للقسطرة أو بدء الإذابة خلال 30 دقيقة. أقل من 60% من عضلة القلب يعني أنك خسرت المريض.', en: 'You have ' + SCENES.length + ' decisions. Every wrong call loses minutes, and with every minute heart muscle dies. Watch the targets on the monitor: ECG within 10 minutes, and out to PCI or lysis started within 30. Below 60% myocardium saved, you have lost the patient.' }) + '</p>' +
@@ -638,7 +638,7 @@ function finish() {
       L(pass ? { ar: 'أنقذت عضلة القلب', en: 'Muscle saved' } : { ar: 'ضاع وقت كثير', en: 'Too much time lost' }) + '</h1></div></div>' +
     '<p class="story">' + L(pass
       ? (first === SCENES.length ? { ar: 'أداء نموذجي في المسار من أول قرار لآخره. المريضان وصلا للعلاج في الوقت.', en: 'A textbook run of the pathway from first call to last. Both patients reached treatment in time.' } : { ar: 'المريضان وصلا للعلاج، مع نقاط تستحق المراجعة بالأسفل.', en: 'Both patients reached treatment, with points worth reviewing below.' })
-      : { ar: 'التأخير في القرارات كلّف عضلة قلب كثيرة. راجع النقاط بالأسفل والعب مرة ثانية.', en: 'Delays cost a lot of heart muscle. Review the points below and play again.' }) + '</p>' +
+      : { ar: 'التأخير في القرارات كلّف عضلة قلب كثيرة. راجع النقاط بالأسفل وأعد المحاكاة.', en: 'Delays cost a lot of heart muscle. Review the points below and run it again.' }) + '</p>' +
     '<div class="score">' +
       '<div><b>' + myo() + '%</b><span>' + L({ ar: 'عضلة القلب المُنقَذة (60% أو أكثر للنجاح)', en: 'myocardium saved (60% or more to pass)' }) + '</span></div>' +
       '<div><b>' + first + '/' + SCENES.length + '</b><span>' + L({ ar: 'قرارات صحيحة من أول مرة', en: 'decisions right on the first call' }) + '</span></div>' +
@@ -657,7 +657,7 @@ function finish() {
 function applyLang() {
   document.documentElement.lang = LANG;
   document.documentElement.dir = LANG === 'ar' ? 'rtl' : 'ltr';
-  document.title = LANG === 'ar' ? 'لعبة مسار STEMI' : 'STEMI Pathway Game';
+  document.title = LANG === 'ar' ? 'محاكي كود STEMI' : 'STEMI Code Simulator';
   $('langBtn').textContent = LANG === 'ar' ? 'English' : 'العربية';
   $('ecg').setAttribute('aria-label', L({ ar: 'تخطيط القلب', en: 'ECG' }));
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = L(UI[el.dataset.t]); });
